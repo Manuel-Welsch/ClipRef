@@ -7,10 +7,12 @@ puts an `@`-reference on your clipboard. Paste that into Claude Code and it read
 file only when it actually needs to — so giant logs and images stay out of your context
 until they matter.
 
+```mermaid
+flowchart LR
+    A([Copy a log or screenshot]) --> B([Click the menu-bar icon]) --> C([Paste ⌘V into Claude Code])
 ```
-copy a log or screenshot  →  click the menu-bar icon  →  ⌘V into Claude Code
-                                       ↳ pastes  @/…/clip-2026-06-02-12-45-47.png
-```
+
+<sub>That last step drops in something like `@/Users/you/Developer/clipboard-logs/clip-2026-06-02-12-45-47.png` — a reference Claude resolves only when it needs the contents.</sub>
 
 ## Install
 
@@ -50,9 +52,21 @@ ClipRef sits in your **menu bar** (a clipboard icon) — no Dock icon, no window
    a checkmark. Your clipboard now holds an `@`-path to that file.
 3. Switch to Claude Code and press **⌘V**. The pasted `@…` becomes a file reference.
 
-That's it — Claude can now read (or, for an image, copy in) the file on demand.
+### Example
 
-**Right-click** the icon for the menu:
+Your app crashes. You select the whole stack trace and ⌘C, then click the ClipRef icon —
+a checkmark flashes and your clipboard is now:
+
+```
+@/Users/you/Developer/clipboard-logs/clip-2026-06-02-14-03-12.txt
+```
+
+Over in Claude Code you type **`why is this crashing?`**, press **⌘V**, and hit return.
+Claude pulls the full trace from the file — without 300 lines flooding the conversation.
+
+### Menu (right-click)
+
+<!-- TODO: replace this table with a screenshot of the right-click menu -->
 
 | Item | What it does |
 | --- | --- |
