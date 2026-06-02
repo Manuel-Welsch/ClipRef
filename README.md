@@ -75,6 +75,7 @@ Claude pulls the full trace from the file — without 300 lines flooding the con
 ## Good to know
 
 - **Where files go:** `~/Developer/clipboard-logs` by default — change it from the menu.
+- **One folder to grant, not your whole disk.** Claude Code can only read the folders you give it access to — so a single clipboard folder is the one path you ever have to share, instead of opening up your real project directories. It only fills when you click, and cleans itself up.
 - **Any file works:** copy a file in Finder (PDF, image, zip, …) and ClipRef copies it into that folder under its **original name** (`report.pdf`), with the `@`-path ready to paste. Copy a second file of the same name and it becomes `report 2.pdf`, Finder-style. (Folders and `.app` bundles are skipped — ClipRef saves files, not directories.)
 - **Big files are skipped:** anything over 100 MB isn't copied (a quick alert says so), so a giant video or disk image can't freeze the menu while it copies.
 - **Self-cleaning, and only after itself:** files ClipRef saved are deleted automatically after 7 days, so the folder never piles up — but it *only* removes files it created, so anything else you keep in that folder is left untouched. (`defaults write de.manuelwelsch.ClipRef retentionDays 14` keeps them longer.)
