@@ -7,12 +7,13 @@ puts an `@`-reference on your clipboard. Paste that into Claude Code and it read
 file only when it actually needs to — so giant logs and images stay out of your context
 until they matter.
 
-```mermaid
-flowchart LR
-    A([Copy a log or screenshot]) --> B([Click the menu-bar icon]) --> C([Paste ⌘V into Claude Code])
-```
+**Without ClipRef**, pasting a 2,500-line log straight into Claude Code floods the composer:
 
-<sub>That last step drops in something like `@/Users/you/Developer/clipboard-logs/clip-2026-06-02-12-45-47.png` — a reference Claude resolves only when it needs the contents.</sub>
+![A 2,500-line log flooding the Claude Code composer](docs/before.png)
+
+**With ClipRef**, one click turns it into a single `@`-reference Claude reads only when it needs the contents:
+
+![The same paste, now a one-line @-reference](docs/paste.png)
 
 ## Install
 
