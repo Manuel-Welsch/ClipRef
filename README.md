@@ -68,15 +68,7 @@ Claude pulls the full trace from the file — without 300 lines flooding the con
 
 ### Menu (right-click)
 
-<!-- TODO: replace this table with a screenshot of the right-click menu -->
-
-| Item | What it does |
-| --- | --- |
-| **Save Clipboard Now** | Same as a left-click |
-| **Open Folder** | Opens where your files are saved |
-| **Change Folder…** | Pick a different save location |
-| **Launch at Login** | On by default; toggle here |
-| **Quit ClipRef** | Quit the app |
+![ClipRef's menu-bar menu](docs/menu.png)
 
 ## Good to know
 
