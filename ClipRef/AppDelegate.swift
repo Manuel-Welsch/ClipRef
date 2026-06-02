@@ -5,6 +5,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private let saver = ClipboardSaver.shared
 
+    private enum UI {
+        static let defaultSymbol = "doc.on.clipboard"
+        static let successSymbol = "checkmark.circle.fill"
+        static let warningSymbol = "exclamationmark.triangle.fill"
+        static let failureSymbol = "xmark.octagon.fill"
+        static let successSound = "Pop"
+        static let failureSound = "Funk"
+        static let flashDuration: TimeInterval = 1.1
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -35,11 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func performSave() {
         switch saver.saveClipboard() {
         case .success:
-            flash(symbol: "checkmark.circle.fill", success: true)
+            flash(symbol: UI.successSymbol, success: true)
         case .noContent:
-            flash(symbol: "exclamationmark.triangle.fill", success: false)
+            flash(symbol: UI.warningSymbol, success: false)
         case .failure(let message):
-            flash(symbol: "xmark.octagon.fill", success: false)
+            flash(symbol: UI.failureSymbol, success: false)
             presentError(message)
         }
     }
@@ -83,8 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuSave() { performSave() }
 
     @objc private func openFolder() {
-        let folder = saver.folderURL
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let folder = (try? saver.makeDestinationFolder()) ?? saver.folderURL
         NSWorkspace.shared.open(folder)
     }
 
@@ -130,8 +139,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func flash(symbol: String, success: Bool) {
         statusItem.button?.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        NSSound(named: success ? "Pop" : "Funk")?.play()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self] in
+        NSSound(named: success ? UI.successSound : UI.failureSound)?.play()
+        DispatchQueue.main.asyncAfter(deadline: .now() + UI.flashDuration) { [weak self] in
             self?.statusItem.button?.image = Self.defaultImage()
         }
     }
@@ -146,7 +155,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func defaultImage() -> NSImage? {
-        let image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipRef")
+        let image = NSImage(systemSymbolName: UI.defaultSymbol, accessibilityDescription: "ClipRef")
         image?.isTemplate = true
         return image
     }
