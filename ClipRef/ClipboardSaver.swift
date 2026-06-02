@@ -62,7 +62,7 @@ final class ClipboardSaver {
     }
 
     /// Saves the clipboard to a new file and replaces the clipboard contents with
-    /// an `@<path>` reference. Text wins if present; otherwise an image is saved.
+    /// an `@<path>` reference. A file wins if present, then text, then an image.
     @discardableResult
     func saveClipboard() -> SaveResult {
         let pasteboard = NSPasteboard.general
@@ -199,22 +199,20 @@ final class ClipboardSaver {
         }
     }
 
-    /// A non-existing file URL named `clip-YYYY-MM-DD-HH-mm-ss.<ext>`, appending a
-    /// numeric suffix if a file from the same second already exists.
-    static func uniqueURL(in folder: URL, extension ext: String) -> URL {
+    /// Formats the timestamp used in `clip-<timestamp>` names. Cached because
+    /// `DateFormatter` is expensive to construct and the format never changes.
+    private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = Const.timestampFormat
-        let stamp = formatter.string(from: Date())
-        let suffix = ext.isEmpty ? "" : ".\(ext)"
+        return formatter
+    }()
 
-        var url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)\(suffix)")
-        var counter = 2
-        while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter)\(suffix)")
-            counter += 1
-        }
-        return url
+    /// A non-existing file URL named `clip-<timestamp>.<ext>` for text and image saves,
+    /// appending a numeric suffix if a file from the same second already exists.
+    static func uniqueURL(in folder: URL, extension ext: String) -> URL {
+        let stamp = timestampFormatter.string(from: Date())
+        return uniqueURL(in: folder, stem: "\(Const.filePrefix)\(stamp)", separator: "-", extension: ext)
     }
 
     /// A non-existing file URL inside `folder` that keeps `preferredName` as-is, adding
@@ -222,14 +220,18 @@ final class ClipboardSaver {
     /// Used for copied files so they land under their original name.
     static func uniqueURL(in folder: URL, preferredName: String) -> URL {
         let name = preferredName as NSString
-        let ext = name.pathExtension
-        let base = name.deletingPathExtension
-        let suffix = ext.isEmpty ? "" : ".\(ext)"
+        return uniqueURL(in: folder, stem: name.deletingPathExtension, separator: " ", extension: name.pathExtension)
+    }
 
-        var url = folder.appendingPathComponent(preferredName)
+    /// Returns a non-existing URL for `stem`(+`.ext`) in `folder`, disambiguating a
+    /// collision by inserting `separator``counter` before the extension — e.g.
+    /// `report 2.pdf` (separator " ") or `clip-…-2.txt` (separator "-").
+    private static func uniqueURL(in folder: URL, stem: String, separator: String, extension ext: String) -> URL {
+        let suffix = ext.isEmpty ? "" : ".\(ext)"
+        var url = folder.appendingPathComponent("\(stem)\(suffix)")
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("\(base) \(counter)\(suffix)")
+            url = folder.appendingPathComponent("\(stem)\(separator)\(counter)\(suffix)")
             counter += 1
         }
         return url
