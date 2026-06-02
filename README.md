@@ -1,4 +1,4 @@
-# LogPaste
+# ClipRef
 
 A tiny macOS menu-bar app that saves your clipboard to a text file and hands you back
 an `@`-reference you can paste straight into [Claude Code](https://claude.com/claude-code).
@@ -24,10 +24,10 @@ copy a log  ─▶  click the menu-bar icon  ─▶  ⌘V into Claude Code
 - **Configurable folder.** Defaults to `~/Developer/clipboard-logs`; change it from the
   right-click menu (the choice is remembered).
 - **Automatic 7-day cleanup.** Files older than the retention window are pruned on launch
-  and after each save. Only files LogPaste created (`clip-*.txt`) are ever deleted.
+  and after each save. Only files ClipRef created (`clip-*.txt`) are ever deleted.
 - **Launch at login.** Registered via `SMAppService`; toggle it from the menu.
 - **No Dock icon.** Runs as a menu-bar agent (`LSUIElement`).
-- **Headless mode.** `LogPaste --save-once` does the save from a script/terminal.
+- **Headless mode.** `ClipRef --save-once` does the save from a script/terminal.
 
 ## Requirements
 
@@ -39,12 +39,12 @@ copy a log  ─▶  click the menu-bar icon  ─▶  ⌘V into Claude Code
 ### Build from source
 
 ```sh
-git clone <this-repo-url>
-cd LogPaste
-xcodebuild -project LogPaste.xcodeproj -scheme LogPaste \
+git clone https://github.com/Manuel-Welsch/ClipRef.git
+cd ClipRef
+xcodebuild -project ClipRef.xcodeproj -scheme ClipRef \
   -configuration Release -derivedDataPath build -allowProvisioningUpdates build
-ditto build/Build/Products/Release/LogPaste.app /Applications/LogPaste.app
-open /Applications/LogPaste.app
+ditto build/Build/Products/Release/ClipRef.app /Applications/ClipRef.app
+open /Applications/ClipRef.app
 ```
 
 > **Signing:** the project is set to automatic signing with a specific Apple Development
@@ -57,7 +57,7 @@ open /Applications/LogPaste.app
 ### Or open in Xcode
 
 ```sh
-open LogPaste.xcodeproj
+open ClipRef.xcodeproj
 ```
 
 Then Run (⌘R). For login-at-launch to point at a stable location, copy the built app to
@@ -72,7 +72,7 @@ Then Run (⌘R). For login-at-launch to point at a stable location, copy the bui
   - **Open Logs Folder**
   - **Change Logs Folder…**
   - **Launch at Login** (toggle)
-  - **Quit LogPaste**
+  - **Quit ClipRef**
 - Switch to Claude Code and **⌘V** — the pasted `@/…/clip-….txt` resolves to a file
   reference.
 
@@ -81,13 +81,13 @@ Then Run (⌘R). For login-at-launch to point at a stable location, copy the bui
 | What | How | Default |
 | --- | --- | --- |
 | Logs folder | Right-click → *Change Logs Folder…* | `~/Developer/clipboard-logs` |
-| Retention (days) | `defaults write de.manuelwelsch.LogPaste retentionDays 14` | `7` |
+| Retention (days) | `defaults write de.manuelwelsch.ClipRef retentionDays 14` | `7` |
 | Launch at login | Right-click → *Launch at Login* | on (first run) |
 
 ## Headless / CLI mode
 
 ```sh
-/Applications/LogPaste.app/Contents/MacOS/LogPaste --save-once
+/Applications/ClipRef.app/Contents/MacOS/ClipRef --save-once
 # prints the saved file path; exit 0 = saved, 2 = clipboard had no text, 1 = write error
 ```
 
@@ -102,16 +102,16 @@ This runs the exact same save logic as a left-click — handy for scripting or t
 - **`SMAppService.mainApp`** handles launch-at-login (shows up in *System Settings → General
   → Login Items*).
 - The Xcode project uses a **file-system synchronized group**, so any `.swift` file dropped
-  into `LogPaste/` is automatically part of the target — no `pbxproj` bookkeeping.
+  into `ClipRef/` is automatically part of the target — no `pbxproj` bookkeeping.
 
 ### Project layout
 
 ```
-LogPaste/
+ClipRef/
   main.swift            App entry point + --save-once headless mode
   AppDelegate.swift     Menu-bar item, click handling, menu, login item
   ClipboardLogger.swift Clipboard → file, @-path, retention cleanup
-LogPaste.xcodeproj/     Xcode project (synchronized group, shared scheme)
+ClipRef.xcodeproj/     Xcode project (synchronized group, shared scheme)
 ```
 
 ## Releasing
@@ -120,7 +120,7 @@ This repo builds a locally-signed app. To distribute it more widely:
 
 - **Direct download / Homebrew Cask** — sign with a **Developer ID** certificate and
   **notarize** the app, then attach a zipped `.app` (or `.dmg`) to a GitHub Release. A
-  Homebrew *Cask* (in your own tap) can then `brew install --cask logpaste` and drop it
+  Homebrew *Cask* (in your own tap) can then `brew install --cask clipref` and drop it
   into `/Applications`.
 - **Mac App Store** — requires the Apple Developer Program, enabling **App Sandbox** (which
   changes file access: writing to an arbitrary user folder needs a security-scoped bookmark

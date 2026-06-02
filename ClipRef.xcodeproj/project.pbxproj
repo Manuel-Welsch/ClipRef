@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		D10000000000000000000003 /* LogPaste */ = {
+		D10000000000000000000003 /* ClipRef */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = LogPaste;
+			path = ClipRef;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -28,7 +28,7 @@
 		D10000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				D10000000000000000000003 /* LogPaste */,
+				D10000000000000000000003 /* ClipRef */,
 				D10000000000000000000002 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -36,7 +36,7 @@
 		D10000000000000000000002 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				D10000000000000000000005 /* LogPaste.app */,
+				D10000000000000000000005 /* ClipRef.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -44,9 +44,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		D10000000000000000000004 /* LogPaste */ = {
+		D10000000000000000000004 /* ClipRef */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D1000000000000000000000A /* Build configuration list for PBXNativeTarget "LogPaste" */;
+			buildConfigurationList = D1000000000000000000000A /* Build configuration list for PBXNativeTarget "ClipRef" */;
 			buildPhases = (
 				D10000000000000000000007 /* Sources */,
 				D10000000000000000000008 /* Frameworks */,
@@ -57,11 +57,11 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				D10000000000000000000003 /* LogPaste */,
+				D10000000000000000000003 /* ClipRef */,
 			);
-			name = LogPaste;
-			productName = LogPaste;
-			productReference = D10000000000000000000005 /* LogPaste.app */;
+			name = ClipRef;
+			productName = ClipRef;
+			productReference = D10000000000000000000005 /* ClipRef.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -79,7 +79,7 @@
 					};
 				};
 			};
-			buildConfigurationList = D1000000000000000000000B /* Build configuration list for PBXProject "LogPaste" */;
+			buildConfigurationList = D1000000000000000000000B /* Build configuration list for PBXProject "ClipRef" */;
 			compatibilityVersion = "Xcode 16.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -94,7 +94,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D10000000000000000000004 /* LogPaste */,
+				D10000000000000000000004 /* ClipRef */,
 			);
 		};
 /* End PBXProject section */
@@ -186,7 +186,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.manuelwelsch.LogPaste;
+				PRODUCT_BUNDLE_IDENTIFIER = de.manuelwelsch.ClipRef;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -209,7 +209,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = de.manuelwelsch.LogPaste;
+				PRODUCT_BUNDLE_IDENTIFIER = de.manuelwelsch.ClipRef;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -219,7 +219,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D1000000000000000000000A /* Build configuration list for PBXNativeTarget "LogPaste" */ = {
+		D1000000000000000000000A /* Build configuration list for PBXNativeTarget "ClipRef" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D1000000000000000000000E /* Debug */,
@@ -228,7 +228,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D1000000000000000000000B /* Build configuration list for PBXProject "LogPaste" */ = {
+		D1000000000000000000000B /* Build configuration list for PBXProject "ClipRef" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D1000000000000000000000C /* Debug */,

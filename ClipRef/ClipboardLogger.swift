@@ -35,7 +35,7 @@ final class ClipboardLogger {
     }
 
     /// Number of days to keep log files. Override with
-    /// `defaults write de.manuelwelsch.LogPaste retentionDays <N>`.
+    /// `defaults write de.manuelwelsch.ClipRef retentionDays <N>`.
     var retentionDays: Int {
         let value = defaults.integer(forKey: "retentionDays")
         return value > 0 ? value : 7

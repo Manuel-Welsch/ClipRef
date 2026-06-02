@@ -1,7 +1,7 @@
 import AppKit
 
 // Headless one-shot mode, useful for scripting and verification:
-//   LogPaste --save-once
+//   ClipRef --save-once
 // Writes the current clipboard to a new log file, copies an @<path> reference
 // back onto the clipboard, prints the file path, and exits.
 if CommandLine.arguments.contains("--save-once") {
