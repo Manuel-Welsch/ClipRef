@@ -11,7 +11,8 @@ enum SaveResult {
 /// user-configurable folder, and then puts an `@`-prefixed absolute path back on
 /// the clipboard so it can be pasted straight into Claude Code as a file reference.
 ///
-/// Text is saved as `.txt`; an image on the clipboard is saved as `.png`.
+/// A file on the clipboard is copied as-is (its extension preserved); plain text is
+/// saved as `.txt`; raw image data (e.g. a screenshot) is saved as `.png`.
 final class ClipboardSaver {
     static let shared = ClipboardSaver()
 
@@ -64,9 +65,14 @@ final class ClipboardSaver {
     @discardableResult
     func saveClipboard() -> SaveResult {
         let pasteboard = NSPasteboard.general
+        let fileURL = Self.firstFileURL(on: pasteboard)
         let imageData = pngData(from: pasteboard)
 
-        switch Self.decide(text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
+        switch Self.decide(fileURL: fileURL, text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
+        case .copyFile(let source):
+            return write(extension: source.pathExtension, pasteboard: pasteboard) { destination in
+                try FileManager.default.copyItem(at: source, to: destination)
+            }
         case .saveText(let text):
             return write(extension: Const.textExtension, pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
@@ -81,20 +87,31 @@ final class ClipboardSaver {
         }
     }
 
-    /// What `saveClipboard` should do, decided purely from the clipboard's text and
-    /// whether an image is present: text wins, our own `@<path>` references are ignored,
-    /// otherwise an image is saved. Pure and side-effect-free, so it can be unit-tested.
+    /// What `saveClipboard` should do, decided purely from what's on the clipboard:
+    /// a real file wins (copied as-is), then text, then an image; our own `@<path>`
+    /// references are ignored. Pure and side-effect-free, so it can be unit-tested.
     enum SaveDecision: Equatable {
+        case copyFile(URL)
         case saveText(String)
         case saveImage
         case ignore
     }
 
-    static func decide(text: String?, hasImage: Bool) -> SaveDecision {
+    static func decide(fileURL: URL?, text: String?, hasImage: Bool) -> SaveDecision {
+        if let fileURL {
+            return .copyFile(fileURL)
+        }
         if let text, !text.isEmpty {
             return looksLikeReference(text) ? .ignore : .saveText(text)
         }
         return hasImage ? .saveImage : .ignore
+    }
+
+    /// The first real file on the clipboard (e.g. a file copied in Finder), or nil.
+    private static func firstFileURL(on pasteboard: NSPasteboard) -> URL? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
+        return urls?.first
     }
 
     /// True when the clipboard already holds one of our `@<path>` references: a single
@@ -150,7 +167,7 @@ final class ClipboardSaver {
     }
 
     /// Deletes saved files older than `retentionDays`. Only touches files this app
-    /// created (`clip-*.txt` / `clip-*.png`), so it is safe even if the folder holds
+    /// created (anything named `clip-*`), so it is safe even if the folder holds
     /// other files.
     func pruneOldFiles() {
         let fileManager = FileManager.default
@@ -160,11 +177,9 @@ final class ClipboardSaver {
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let keepExtensions: Set<String> = [Const.textExtension, Const.imageExtension]
         let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            guard url.lastPathComponent.hasPrefix(Const.filePrefix),
-                  keepExtensions.contains(url.pathExtension.lowercased()) else { continue }
+            guard url.lastPathComponent.hasPrefix(Const.filePrefix) else { continue }
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             if let modified, modified < cutoff {
                 try? fileManager.removeItem(at: url)
@@ -179,11 +194,12 @@ final class ClipboardSaver {
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = Const.timestampFormat
         let stamp = formatter.string(from: Date())
+        let suffix = ext.isEmpty ? "" : ".\(ext)"
 
-        var url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp).\(ext)")
+        var url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)\(suffix)")
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter).\(ext)")
+            url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter)\(suffix)")
             counter += 1
         }
         return url

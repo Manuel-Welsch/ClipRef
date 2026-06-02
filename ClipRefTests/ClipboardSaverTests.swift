@@ -6,26 +6,38 @@ final class ClipboardSaverTests: XCTestCase {
     // MARK: - decide(text:hasImage:)
 
     func testTextIsSaved() {
-        XCTAssertEqual(ClipboardSaver.decide(text: "hello", hasImage: false), .saveText("hello"))
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "hello", hasImage: false), .saveText("hello"))
     }
 
     func testTextWinsOverImage() {
-        XCTAssertEqual(ClipboardSaver.decide(text: "hello", hasImage: true), .saveText("hello"))
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "hello", hasImage: true), .saveText("hello"))
     }
 
     func testImageSavedWhenNoText() {
-        XCTAssertEqual(ClipboardSaver.decide(text: nil, hasImage: true), .saveImage)
-        XCTAssertEqual(ClipboardSaver.decide(text: "", hasImage: true), .saveImage)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: nil, hasImage: true), .saveImage)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "", hasImage: true), .saveImage)
     }
 
     func testEmptyClipboardIgnored() {
-        XCTAssertEqual(ClipboardSaver.decide(text: nil, hasImage: false), .ignore)
-        XCTAssertEqual(ClipboardSaver.decide(text: "", hasImage: false), .ignore)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: nil, hasImage: false), .ignore)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "", hasImage: false), .ignore)
     }
 
     func testReferenceIgnoredEvenWithImage() {
-        XCTAssertEqual(ClipboardSaver.decide(text: "@/Users/me/clip.txt", hasImage: false), .ignore)
-        XCTAssertEqual(ClipboardSaver.decide(text: "@/Users/me/clip.png", hasImage: true), .ignore)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "@/Users/me/clip.txt", hasImage: false), .ignore)
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "@/Users/me/clip.png", hasImage: true), .ignore)
+    }
+
+    // MARK: - decide: files
+
+    func testFileIsCopied() {
+        let url = URL(fileURLWithPath: "/tmp/report.pdf")
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: url, text: nil, hasImage: false), .copyFile(url))
+    }
+
+    func testFileWinsOverTextAndImage() {
+        let url = URL(fileURLWithPath: "/tmp/clip.mov")
+        XCTAssertEqual(ClipboardSaver.decide(fileURL: url, text: "ignored text", hasImage: true), .copyFile(url))
     }
 
     // MARK: - looksLikeReference
