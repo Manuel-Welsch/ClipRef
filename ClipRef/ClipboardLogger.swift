@@ -50,6 +50,9 @@ final class ClipboardLogger {
         let pasteboard = NSPasteboard.general
 
         if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            // Ignore our own @<path> references, so pressing the button again with a
+            // just-created reference on the clipboard doesn't save it into a new file.
+            if Self.looksLikeReference(text) { return .noContent }
             return write(extension: "txt", pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
             }
@@ -62,6 +65,17 @@ final class ClipboardLogger {
         }
 
         return .noContent
+    }
+
+    /// True when the clipboard already holds one of our `@<path>` references: a single
+    /// token starting with `@` followed by an absolute (`/`) or home (`~`) path. Used to
+    /// skip re-saving a reference that the previous click just put on the clipboard.
+    private static func looksLikeReference(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("@"),
+              !trimmed.contains(where: { $0.isWhitespace }) else { return false }
+        let path = trimmed.dropFirst()
+        return path.hasPrefix("/") || path.hasPrefix("~")
     }
 
     /// Creates the folder, writes the file via `body`, swaps the clipboard for an
