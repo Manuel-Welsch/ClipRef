@@ -19,7 +19,9 @@ final class ClipboardSaver {
 
     private enum Const {
         static let filePrefix = "clip-"
-        static let timestampFormat = "yyyy-MM-dd-HH-mm-ss"
+        // Dashes for the date, dots for the time (mirrors macOS screenshot names) so the
+        // two read apart at a glance; `_` between. Shell- and `@`-reference-safe, sortable.
+        static let timestampFormat = "yyyy-MM-dd'_'HH.mm.ss"
         static let textExtension = "txt"
         static let imageExtension = "png"
         static let defaultRetentionDays = 7

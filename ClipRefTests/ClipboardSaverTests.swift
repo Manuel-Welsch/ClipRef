@@ -73,7 +73,7 @@ final class ClipboardSaverTests: XCTestCase {
         XCTAssertEqual(first.pathExtension, "txt")
         let stem = first.deletingPathExtension().lastPathComponent
         XCTAssertNotNil(
-            stem.range(of: #"^clip-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$"#, options: .regularExpression),
+            stem.range(of: #"^clip-\d{4}-\d{2}-\d{2}_\d{2}\.\d{2}\.\d{2}$"#, options: .regularExpression),
             "unexpected name: \(stem)"
         )
 
