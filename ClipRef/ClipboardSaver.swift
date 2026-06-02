@@ -7,12 +7,13 @@ enum SaveResult {
     case failure(String)
 }
 
-/// Reads the system clipboard, writes it to a timestamped file inside a
-/// user-configurable folder, and then puts an `@`-prefixed absolute path back on
-/// the clipboard so it can be pasted straight into Claude Code as a file reference.
+/// Reads the system clipboard, writes it to a file inside a user-configurable
+/// folder, and then puts an `@`-prefixed absolute path back on the clipboard so it
+/// can be pasted straight into Claude Code as a file reference.
 ///
-/// A file on the clipboard is copied as-is (its extension preserved); plain text is
-/// saved as `.txt`; raw image data (e.g. a screenshot) is saved as `.png`.
+/// A file on the clipboard is copied keeping its original name (`report.pdf`),
+/// adding a Finder-style suffix on collision (`report 2.pdf`); plain text is saved
+/// as `clip-<timestamp>.txt` and raw image data (e.g. a screenshot) as `.png`.
 final class ClipboardSaver {
     static let shared = ClipboardSaver()
 
@@ -73,16 +74,16 @@ final class ClipboardSaver {
             guard Self.isCopyableFile(source) else {
                 return .failure("ClipRef saves files, not folders — “\(source.lastPathComponent)” is a folder or app bundle. Copy a file instead.")
             }
-            return write(extension: source.pathExtension, pasteboard: pasteboard) { destination in
+            return write(named: { Self.uniqueURL(in: $0, preferredName: source.lastPathComponent) }, pasteboard: pasteboard) { destination in
                 try FileManager.default.copyItem(at: source, to: destination)
             }
         case .saveText(let text):
-            return write(extension: Const.textExtension, pasteboard: pasteboard) { url in
+            return write(named: { Self.uniqueURL(in: $0, extension: Const.textExtension) }, pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
             }
         case .saveImage:
             guard let imageData else { return .noContent }
-            return write(extension: Const.imageExtension, pasteboard: pasteboard) { url in
+            return write(named: { Self.uniqueURL(in: $0, extension: Const.imageExtension) }, pasteboard: pasteboard) { url in
                 try imageData.write(to: url, options: .atomic)
             }
         case .ignore:
@@ -135,9 +136,9 @@ final class ClipboardSaver {
         return path.hasPrefix("/") || path.hasPrefix("~")
     }
 
-    /// Creates the folder, writes the file via `body`, swaps the clipboard for an
-    /// `@<path>` reference, and prunes old files.
-    private func write(extension ext: String, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
+    /// Creates the folder, picks the destination via `name`, writes the file via
+    /// `body`, swaps the clipboard for an `@<path>` reference, and prunes old files.
+    private func write(named name: (URL) -> URL, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
         let folder: URL
         do {
             folder = try makeDestinationFolder()
@@ -145,7 +146,7 @@ final class ClipboardSaver {
             return .failure("Could not create folder:\n\(error.localizedDescription)")
         }
 
-        let fileURL = Self.uniqueURL(in: folder, extension: ext)
+        let fileURL = name(folder)
         do {
             try body(fileURL)
         } catch {
@@ -210,6 +211,24 @@ final class ClipboardSaver {
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
             url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter)\(suffix)")
+            counter += 1
+        }
+        return url
+    }
+
+    /// A non-existing file URL inside `folder` that keeps `preferredName` as-is, adding
+    /// a Finder-style " 2", " 3" … before the extension on collision (`report 2.pdf`).
+    /// Used for copied files so they land under their original name.
+    static func uniqueURL(in folder: URL, preferredName: String) -> URL {
+        let name = preferredName as NSString
+        let ext = name.pathExtension
+        let base = name.deletingPathExtension
+        let suffix = ext.isEmpty ? "" : ".\(ext)"
+
+        var url = folder.appendingPathComponent(preferredName)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = folder.appendingPathComponent("\(base) \(counter)\(suffix)")
             counter += 1
         }
         return url

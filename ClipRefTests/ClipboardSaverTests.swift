@@ -83,4 +83,37 @@ final class ClipboardSaverTests: XCTestCase {
         XCTAssertNotEqual(first, second)
         XCTAssertFalse(FileManager.default.fileExists(atPath: second.path))
     }
+
+    func testUniqueURLKeepsOriginalNameAndCollidesFinderStyle() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipRefTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        // First save keeps the original name verbatim.
+        let first = ClipboardSaver.uniqueURL(in: dir, preferredName: "report.pdf")
+        XCTAssertEqual(first.lastPathComponent, "report.pdf")
+
+        // On collision, a Finder-style " 2", " 3" … lands before the extension.
+        try Data("a".utf8).write(to: first)
+        let second = ClipboardSaver.uniqueURL(in: dir, preferredName: "report.pdf")
+        XCTAssertEqual(second.lastPathComponent, "report 2.pdf")
+
+        try Data("b".utf8).write(to: second)
+        let third = ClipboardSaver.uniqueURL(in: dir, preferredName: "report.pdf")
+        XCTAssertEqual(third.lastPathComponent, "report 3.pdf")
+    }
+
+    func testUniqueURLPreferredNameWithoutExtension() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipRefTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let first = ClipboardSaver.uniqueURL(in: dir, preferredName: "Makefile")
+        XCTAssertEqual(first.lastPathComponent, "Makefile")
+        try Data("x".utf8).write(to: first)
+        let second = ClipboardSaver.uniqueURL(in: dir, preferredName: "Makefile")
+        XCTAssertEqual(second.lastPathComponent, "Makefile 2")
+    }
 }
