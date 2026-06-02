@@ -74,7 +74,7 @@ final class ClipboardLogger {
             return .failure("Could not create folder:\n\(error.localizedDescription)")
         }
 
-        let fileURL = folder.appendingPathComponent(Self.makeFileName(extension: ext))
+        let fileURL = Self.uniqueURL(in: folder, extension: ext)
         do {
             try body(fileURL)
         } catch {
@@ -128,11 +128,20 @@ final class ClipboardLogger {
         }
     }
 
-    private static func makeFileName(extension ext: String) -> String {
+    /// A non-existing file URL named `clip-YYYY-MM-DD-HH-mm-ss.<ext>`, appending a
+    /// numeric suffix if a file from the same second already exists.
+    private static func uniqueURL(in folder: URL, extension ext: String) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        // Millisecond precision keeps file names unique even on rapid double-saves.
-        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
-        return "clip-\(formatter.string(from: Date())).\(ext)"
+        formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        let stamp = formatter.string(from: Date())
+
+        var url = folder.appendingPathComponent("clip-\(stamp).\(ext)")
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            url = folder.appendingPathComponent("clip-\(stamp)-\(counter).\(ext)")
+            counter += 1
+        }
+        return url
     }
 }
