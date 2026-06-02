@@ -3,7 +3,7 @@ import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
-    private let logger = ClipboardLogger.shared
+    private let saver = ClipboardSaver.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = "Left-click: save clipboard (text or image) to a file · Right-click: menu"
         }
         enableLaunchAtLoginOnFirstRun()
-        logger.cleanupOldLogs()
+        saver.pruneOldFiles()
     }
 
     // MARK: - Click handling
@@ -33,7 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func performSave() {
-        switch logger.saveClipboard() {
+        switch saver.saveClipboard() {
         case .success:
             flash(symbol: "checkmark.circle.fill", success: true)
         case .noContent:
@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMenu() {
         let menu = NSMenu()
 
-        let folderItem = NSMenuItem(title: "Saves → \(logger.folderURL.path)", action: nil, keyEquivalent: "")
+        let folderItem = NSMenuItem(title: "Saves → \(saver.folderURL.path)", action: nil, keyEquivalent: "")
         folderItem.isEnabled = false
         menu.addItem(folderItem)
         menu.addItem(.separator())
@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func menuSave() { performSave() }
 
     @objc private func openFolder() {
-        let folder = logger.folderURL
+        let folder = saver.folderURL
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         NSWorkspace.shared.open(folder)
     }
@@ -96,10 +96,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
         panel.message = "Choose the folder where saved clipboard files will be stored"
-        panel.directoryURL = logger.folderURL
+        panel.directoryURL = saver.folderURL
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
-            logger.setFolder(url)
+            saver.setFolder(url)
         }
     }
 

@@ -12,8 +12,8 @@ enum SaveResult {
 /// the clipboard so it can be pasted straight into Claude Code as a file reference.
 ///
 /// Text is saved as `.txt`; an image on the clipboard is saved as `.png`.
-final class ClipboardLogger {
-    static let shared = ClipboardLogger()
+final class ClipboardSaver {
+    static let shared = ClipboardSaver()
 
     private let defaults = UserDefaults.standard
     private let folderKey = "logFolderPath"
@@ -100,7 +100,7 @@ final class ClipboardLogger {
         pasteboard.clearContents()
         pasteboard.setString("@\(fileURL.path)", forType: .string)
 
-        cleanupOldLogs()
+        pruneOldFiles()
         return .success(fileURL)
     }
 
@@ -122,7 +122,7 @@ final class ClipboardLogger {
     /// Deletes saved files older than `retentionDays`. Only touches files this app
     /// created (`clip-*.txt` / `clip-*.png`), so it is safe even if the folder holds
     /// other files.
-    func cleanupOldLogs() {
+    func pruneOldFiles() {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(
             at: folderURL,

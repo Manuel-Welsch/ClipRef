@@ -5,7 +5,7 @@ import AppKit
 // Writes the current clipboard (text or image) to a new file, copies an @<path>
 // reference back onto the clipboard, prints the file path, and exits.
 if CommandLine.arguments.contains("--save-once") {
-    switch ClipboardLogger.shared.saveClipboard() {
+    switch ClipboardSaver.shared.saveClipboard() {
     case .success(let url):
         FileHandle.standardOutput.write(Data("\(url.path)\n".utf8))
         exit(0)
