@@ -25,6 +25,12 @@ final class ClipboardSaver {
         static let textExtension = "txt"
         static let imageExtension = "png"
         static let defaultRetentionDays = 7
+        // Copies run synchronously on the main thread, so cap the size to keep a huge
+        // file from freezing the menu while it copies. 100 MB (decimal, matches Finder).
+        static let maxCopyableBytes = 100 * 1_000_000
+        // Reverse-DNS xattr stamped on every file we save; its value is the save date as a
+        // `timeIntervalSince1970` string. Prune deletes only files carrying this key.
+        static let ownerXattr = "de.manuelwelsch.ClipRef.savedAt"
     }
 
     private let defaults = UserDefaults.standard
@@ -75,6 +81,10 @@ final class ClipboardSaver {
         case .copyFile(let source):
             guard Self.isCopyableFile(source) else {
                 return .failure("ClipRef saves files, not folders — “\(source.lastPathComponent)” is a folder or app bundle. Copy a file instead.")
+            }
+            guard Self.fitsSizeLimit(source) else {
+                let limit = ByteCountFormatter.string(fromByteCount: Int64(Const.maxCopyableBytes), countStyle: .file)
+                return .failure("“\(source.lastPathComponent)” is too large to copy (ClipRef's limit is \(limit)). Copy a smaller file.")
             }
             return write(named: { Self.uniqueURL(in: $0, preferredName: source.lastPathComponent) }, pasteboard: pasteboard) { destination in
                 try FileManager.default.copyItem(at: source, to: destination)
@@ -127,6 +137,14 @@ final class ClipboardSaver {
         (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
     }
 
+    /// True when `url`'s size is within `maxBytes` — guards against copying a huge file
+    /// synchronously on the main thread. If the size can't be read we don't block (return
+    /// true); the limit is a best-effort hang guard, not a hard gate.
+    static func fitsSizeLimit(_ url: URL, maxBytes: Int = Const.maxCopyableBytes) -> Bool {
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else { return true }
+        return size <= maxBytes
+    }
+
     /// True when the clipboard already holds one of our `@<path>` references: a single
     /// token starting with `@` followed by an absolute (`/`) or home (`~`) path. Used to
     /// skip re-saving a reference that the previous click just put on the clipboard.
@@ -155,6 +173,10 @@ final class ClipboardSaver {
             return .failure("Could not write file:\n\(error.localizedDescription)")
         }
 
+        // Stamp the file as ClipRef-created so prune can target only our own files,
+        // never anything else the user keeps in the folder.
+        Self.tagAsSaved(fileURL, at: Date())
+
         // Replace the clipboard with an @-reference ready to paste into Claude Code.
         // The saved content is already safely on disk.
         pasteboard.clearContents()
@@ -179,25 +201,57 @@ final class ClipboardSaver {
         return png
     }
 
-    /// Deletes files older than `retentionDays`, judged by the date each file was
-    /// added to the folder rather than its own modification date — a copied file keeps
-    /// the original's timestamps, so only "date added" reflects when it entered here.
-    /// Applies to every file in the folder, so original-named copies (`report.pdf`)
-    /// are cleaned up on the same schedule as `clip-*` text and image files.
+    /// Deletes saved files older than `retentionDays`. A file counts as ours only if it
+    /// carries our `savedAt` xattr, and the xattr stores the save date itself — so prune
+    /// never trusts filesystem timestamps (a copied file keeps the source's mtime, and
+    /// "date added" isn't recorded on every volume) and never touches files the user keeps
+    /// in the folder. Untagged or unparseable files are always left alone.
     func pruneOldFiles() {
+        Self.pruneOldFiles(in: folderURL, retentionDays: retentionDays)
+    }
+
+    /// Prune logic isolated for testing: `now` and the folder are injected so a test can
+    /// stamp files with known dates and assert what survives.
+    static func pruneOldFiles(in folder: URL, retentionDays: Int, now: Date = Date()) {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: [.addedToDirectoryDateKey],
+            at: folder,
+            includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
+        let cutoff = now.addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            let added = (try? url.resourceValues(forKeys: [.addedToDirectoryDateKey]))?.addedToDirectoryDate
-            if let added, added < cutoff {
+            guard let savedAt = savedDate(of: url) else { continue }   // not one of ours
+            if savedAt < cutoff {
                 try? fileManager.removeItem(at: url)
             }
+        }
+    }
+
+    /// Stamps `url` with our `savedAt` xattr, value = `date` as a decimal
+    /// `timeIntervalSince1970` string (human-inspectable via `xattr -p`).
+    static func tagAsSaved(_ url: URL, at date: Date) {
+        let bytes = Array(String(date.timeIntervalSince1970).utf8)
+        url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return }
+            _ = bytes.withUnsafeBytes { setxattr(path, Const.ownerXattr, $0.baseAddress, $0.count, 0, 0) }
+        }
+    }
+
+    /// The save date stamped on `url`, or nil if it isn't one of ours (no xattr) or the
+    /// value can't be parsed. Reading the date back from the tag is how prune avoids
+    /// trusting filesystem dates.
+    static func savedDate(of url: URL) -> Date? {
+        url.withUnsafeFileSystemRepresentation { path -> Date? in
+            guard let path else { return nil }
+            let length = getxattr(path, Const.ownerXattr, nil, 0, 0, 0)
+            guard length > 0 else { return nil }
+            var buffer = [UInt8](repeating: 0, count: length)
+            guard getxattr(path, Const.ownerXattr, &buffer, length, 0, 0) == length,
+                  let string = String(bytes: buffer, encoding: .utf8),
+                  let interval = TimeInterval(string) else { return nil }
+            return Date(timeIntervalSince1970: interval)
         }
     }
 

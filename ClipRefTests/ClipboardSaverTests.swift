@@ -3,7 +3,7 @@ import XCTest
 
 final class ClipboardSaverTests: XCTestCase {
 
-    // MARK: - decide(text:hasImage:)
+    // MARK: - decide(fileURL:text:hasImage:)
 
     func testTextIsSaved() {
         XCTAssertEqual(ClipboardSaver.decide(fileURL: nil, text: "hello", hasImage: false), .saveText("hello"))
@@ -115,5 +115,71 @@ final class ClipboardSaverTests: XCTestCase {
         try Data("x".utf8).write(to: first)
         let second = ClipboardSaver.uniqueURL(in: dir, preferredName: "Makefile")
         XCTAssertEqual(second.lastPathComponent, "Makefile 2")
+    }
+
+    // MARK: - fitsSizeLimit
+
+    func testSizeLimitAcceptsSmallRejectsLarge() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipRefTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("blob.bin")
+        try Data(count: 1_000).write(to: file)
+        XCTAssertTrue(ClipboardSaver.fitsSizeLimit(file, maxBytes: 2_000))
+        XCTAssertFalse(ClipboardSaver.fitsSizeLimit(file, maxBytes: 500))
+    }
+
+    // MARK: - xattr ownership tag + prune
+
+    func testSavedDateRoundTripsThroughXattr() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipRefTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("report.pdf")
+        try Data("x".utf8).write(to: file)
+
+        // An untagged file is not one of ours.
+        XCTAssertNil(ClipboardSaver.savedDate(of: file))
+
+        // After tagging, the stored save date reads back.
+        let when = Date(timeIntervalSince1970: 1_700_000_000)
+        ClipboardSaver.tagAsSaved(file, at: when)
+        let readBack = try XCTUnwrap(ClipboardSaver.savedDate(of: file))
+        XCTAssertEqual(readBack.timeIntervalSince1970, when.timeIntervalSince1970, accuracy: 0.0005)
+    }
+
+    func testPruneDeletesOnlyOurExpiredFiles() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ClipRefTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let fm = FileManager.default
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let day = 24.0 * 60 * 60
+
+        // Ours, 10 days old → pruned.
+        let expired = dir.appendingPathComponent("old.txt")
+        try Data("a".utf8).write(to: expired)
+        ClipboardSaver.tagAsSaved(expired, at: now.addingTimeInterval(-10 * day))
+
+        // Ours, 1 day old → kept.
+        let fresh = dir.appendingPathComponent("new.txt")
+        try Data("b".utf8).write(to: fresh)
+        ClipboardSaver.tagAsSaved(fresh, at: now.addingTimeInterval(-1 * day))
+
+        // Not ours (no tag), even though it's an old plain file → must never be touched.
+        let foreign = dir.appendingPathComponent("user-keepsake.txt")
+        try Data("c".utf8).write(to: foreign)
+
+        ClipboardSaver.pruneOldFiles(in: dir, retentionDays: 7, now: now)
+
+        XCTAssertFalse(fm.fileExists(atPath: expired.path), "expired ClipRef file should be pruned")
+        XCTAssertTrue(fm.fileExists(atPath: fresh.path), "recent ClipRef file should survive")
+        XCTAssertTrue(fm.fileExists(atPath: foreign.path), "untagged user file must never be pruned")
     }
 }
