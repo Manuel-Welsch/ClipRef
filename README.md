@@ -52,6 +52,8 @@ ClipRef sits in your **menu bar** (a clipboard icon) — no Dock icon, no window
    a checkmark. Your clipboard now holds an `@`-path to that file.
 3. Switch to Claude Code and press **⌘V**. The pasted `@…` becomes a file reference.
 
+![The pasted reference in Claude Code](docs/paste.png)
+
 ### Example
 
 Your app crashes. You select the whole stack trace and ⌘C, then click the ClipRef icon —
