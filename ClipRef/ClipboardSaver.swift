@@ -7,20 +7,30 @@ enum SaveResult {
     case failure(String)
 }
 
-/// Reads the system clipboard, writes it to a timestamped file inside a
-/// user-configurable folder, and then puts an `@`-prefixed absolute path back on
-/// the clipboard so it can be pasted straight into Claude Code as a file reference.
+/// Reads the system clipboard, writes it to a file inside a user-configurable
+/// folder, and then puts an `@`-prefixed absolute path back on the clipboard so it
+/// can be pasted straight into Claude Code as a file reference.
 ///
-/// Text is saved as `.txt`; an image on the clipboard is saved as `.png`.
+/// A file on the clipboard is copied keeping its original name (`report.pdf`),
+/// adding a Finder-style suffix on collision (`report 2.pdf`); plain text is saved
+/// as `clip-<timestamp>.txt` and raw image data (e.g. a screenshot) as `.png`.
 final class ClipboardSaver {
     static let shared = ClipboardSaver()
 
     private enum Const {
         static let filePrefix = "clip-"
-        static let timestampFormat = "yyyy-MM-dd-HH-mm-ss"
+        // Dashes for the date, dots for the time (mirrors macOS screenshot names) so the
+        // two read apart at a glance; `_` between. Shell- and `@`-reference-safe, sortable.
+        static let timestampFormat = "yyyy-MM-dd'_'HH.mm.ss"
         static let textExtension = "txt"
         static let imageExtension = "png"
         static let defaultRetentionDays = 7
+        // Copies run synchronously on the main thread, so cap the size to keep a huge
+        // file from freezing the menu while it copies. 100 MB (decimal, matches Finder).
+        static let maxCopyableBytes = 100 * 1_000_000
+        // Reverse-DNS xattr stamped on every file we save; its value is the save date as a
+        // `timeIntervalSince1970` string. Prune deletes only files carrying this key.
+        static let ownerXattr = "de.manuelwelsch.ClipRef.savedAt"
     }
 
     private let defaults = UserDefaults.standard
@@ -60,20 +70,32 @@ final class ClipboardSaver {
     }
 
     /// Saves the clipboard to a new file and replaces the clipboard contents with
-    /// an `@<path>` reference. Text wins if present; otherwise an image is saved.
+    /// an `@<path>` reference. A file wins if present, then text, then an image.
     @discardableResult
     func saveClipboard() -> SaveResult {
         let pasteboard = NSPasteboard.general
+        let fileURL = Self.firstFileURL(on: pasteboard)
         let imageData = pngData(from: pasteboard)
 
-        switch Self.decide(text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
+        switch Self.decide(fileURL: fileURL, text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
+        case .copyFile(let source):
+            guard Self.isCopyableFile(source) else {
+                return .failure("ClipRef saves files, not folders — “\(source.lastPathComponent)” is a folder or app bundle. Copy a file instead.")
+            }
+            guard Self.fitsSizeLimit(source) else {
+                let limit = ByteCountFormatter.string(fromByteCount: Int64(Const.maxCopyableBytes), countStyle: .file)
+                return .failure("“\(source.lastPathComponent)” is too large to copy (ClipRef's limit is \(limit)). Copy a smaller file.")
+            }
+            return write(named: { Self.uniqueURL(in: $0, preferredName: source.lastPathComponent) }, pasteboard: pasteboard) { destination in
+                try FileManager.default.copyItem(at: source, to: destination)
+            }
         case .saveText(let text):
-            return write(extension: Const.textExtension, pasteboard: pasteboard) { url in
+            return write(named: { Self.uniqueURL(in: $0, extension: Const.textExtension) }, pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
             }
         case .saveImage:
             guard let imageData else { return .noContent }
-            return write(extension: Const.imageExtension, pasteboard: pasteboard) { url in
+            return write(named: { Self.uniqueURL(in: $0, extension: Const.imageExtension) }, pasteboard: pasteboard) { url in
                 try imageData.write(to: url, options: .atomic)
             }
         case .ignore:
@@ -81,20 +103,46 @@ final class ClipboardSaver {
         }
     }
 
-    /// What `saveClipboard` should do, decided purely from the clipboard's text and
-    /// whether an image is present: text wins, our own `@<path>` references are ignored,
-    /// otherwise an image is saved. Pure and side-effect-free, so it can be unit-tested.
+    /// What `saveClipboard` should do, decided purely from what's on the clipboard:
+    /// a real file wins (copied as-is), then text, then an image; our own `@<path>`
+    /// references are ignored. Pure and side-effect-free, so it can be unit-tested.
     enum SaveDecision: Equatable {
+        case copyFile(URL)
         case saveText(String)
         case saveImage
         case ignore
     }
 
-    static func decide(text: String?, hasImage: Bool) -> SaveDecision {
+    static func decide(fileURL: URL?, text: String?, hasImage: Bool) -> SaveDecision {
+        if let fileURL {
+            return .copyFile(fileURL)
+        }
         if let text, !text.isEmpty {
             return looksLikeReference(text) ? .ignore : .saveText(text)
         }
         return hasImage ? .saveImage : .ignore
+    }
+
+    /// The first real file on the clipboard (e.g. a file copied in Finder), or nil.
+    private static func firstFileURL(on pasteboard: NSPasteboard) -> URL? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
+        let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
+        return urls?.first
+    }
+
+    /// A clipboard file is only copyable if it's a regular file. Folders and app bundles
+    /// (which are directories) are rejected — an `@`-reference to a directory isn't useful
+    /// to Claude Code, and a real app bundle can be huge.
+    static func isCopyableFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+    }
+
+    /// True when `url`'s size is within `maxBytes` — guards against copying a huge file
+    /// synchronously on the main thread. If the size can't be read we don't block (return
+    /// true); the limit is a best-effort hang guard, not a hard gate.
+    static func fitsSizeLimit(_ url: URL, maxBytes: Int = Const.maxCopyableBytes) -> Bool {
+        guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else { return true }
+        return size <= maxBytes
     }
 
     /// True when the clipboard already holds one of our `@<path>` references: a single
@@ -108,9 +156,9 @@ final class ClipboardSaver {
         return path.hasPrefix("/") || path.hasPrefix("~")
     }
 
-    /// Creates the folder, writes the file via `body`, swaps the clipboard for an
-    /// `@<path>` reference, and prunes old files.
-    private func write(extension ext: String, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
+    /// Creates the folder, picks the destination via `name`, writes the file via
+    /// `body`, swaps the clipboard for an `@<path>` reference, and prunes old files.
+    private func write(named name: (URL) -> URL, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
         let folder: URL
         do {
             folder = try makeDestinationFolder()
@@ -118,12 +166,16 @@ final class ClipboardSaver {
             return .failure("Could not create folder:\n\(error.localizedDescription)")
         }
 
-        let fileURL = Self.uniqueURL(in: folder, extension: ext)
+        let fileURL = name(folder)
         do {
             try body(fileURL)
         } catch {
             return .failure("Could not write file:\n\(error.localizedDescription)")
         }
+
+        // Stamp the file as ClipRef-created so prune can target only our own files,
+        // never anything else the user keeps in the folder.
+        Self.tagAsSaved(fileURL, at: Date())
 
         // Replace the clipboard with an @-reference ready to paste into Claude Code.
         // The saved content is already safely on disk.
@@ -149,41 +201,93 @@ final class ClipboardSaver {
         return png
     }
 
-    /// Deletes saved files older than `retentionDays`. Only touches files this app
-    /// created (`clip-*.txt` / `clip-*.png`), so it is safe even if the folder holds
-    /// other files.
+    /// Deletes saved files older than `retentionDays`. A file counts as ours only if it
+    /// carries our `savedAt` xattr, and the xattr stores the save date itself — so prune
+    /// never trusts filesystem timestamps (a copied file keeps the source's mtime, and
+    /// "date added" isn't recorded on every volume) and never touches files the user keeps
+    /// in the folder. Untagged or unparseable files are always left alone.
     func pruneOldFiles() {
+        Self.pruneOldFiles(in: folderURL, retentionDays: retentionDays)
+    }
+
+    /// Prune logic isolated for testing: `now` and the folder are injected so a test can
+    /// stamp files with known dates and assert what survives.
+    static func pruneOldFiles(in folder: URL, retentionDays: Int, now: Date = Date()) {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(
-            at: folderURL,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            at: folder,
+            includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let keepExtensions: Set<String> = [Const.textExtension, Const.imageExtension]
-        let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
+        let cutoff = now.addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            guard url.lastPathComponent.hasPrefix(Const.filePrefix),
-                  keepExtensions.contains(url.pathExtension.lowercased()) else { continue }
-            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            if let modified, modified < cutoff {
+            guard let savedAt = savedDate(of: url) else { continue }   // not one of ours
+            if savedAt < cutoff {
                 try? fileManager.removeItem(at: url)
             }
         }
     }
 
-    /// A non-existing file URL named `clip-YYYY-MM-DD-HH-mm-ss.<ext>`, appending a
-    /// numeric suffix if a file from the same second already exists.
-    static func uniqueURL(in folder: URL, extension ext: String) -> URL {
+    /// Stamps `url` with our `savedAt` xattr, value = `date` as a decimal
+    /// `timeIntervalSince1970` string (human-inspectable via `xattr -p`).
+    static func tagAsSaved(_ url: URL, at date: Date) {
+        let bytes = Array(String(date.timeIntervalSince1970).utf8)
+        url.withUnsafeFileSystemRepresentation { path in
+            guard let path else { return }
+            _ = bytes.withUnsafeBytes { setxattr(path, Const.ownerXattr, $0.baseAddress, $0.count, 0, 0) }
+        }
+    }
+
+    /// The save date stamped on `url`, or nil if it isn't one of ours (no xattr) or the
+    /// value can't be parsed. Reading the date back from the tag is how prune avoids
+    /// trusting filesystem dates.
+    static func savedDate(of url: URL) -> Date? {
+        url.withUnsafeFileSystemRepresentation { path -> Date? in
+            guard let path else { return nil }
+            let length = getxattr(path, Const.ownerXattr, nil, 0, 0, 0)
+            guard length > 0 else { return nil }
+            var buffer = [UInt8](repeating: 0, count: length)
+            guard getxattr(path, Const.ownerXattr, &buffer, length, 0, 0) == length,
+                  let string = String(bytes: buffer, encoding: .utf8),
+                  let interval = TimeInterval(string) else { return nil }
+            return Date(timeIntervalSince1970: interval)
+        }
+    }
+
+    /// Formats the timestamp used in `clip-<timestamp>` names. Cached because
+    /// `DateFormatter` is expensive to construct and the format never changes.
+    private static let timestampFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = Const.timestampFormat
-        let stamp = formatter.string(from: Date())
+        return formatter
+    }()
 
-        var url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp).\(ext)")
+    /// A non-existing file URL named `clip-<timestamp>.<ext>` for text and image saves,
+    /// appending a numeric suffix if a file from the same second already exists.
+    static func uniqueURL(in folder: URL, extension ext: String) -> URL {
+        let stamp = timestampFormatter.string(from: Date())
+        return uniqueURL(in: folder, stem: "\(Const.filePrefix)\(stamp)", separator: "-", extension: ext)
+    }
+
+    /// A non-existing file URL inside `folder` that keeps `preferredName` as-is, adding
+    /// a Finder-style " 2", " 3" … before the extension on collision (`report 2.pdf`).
+    /// Used for copied files so they land under their original name.
+    static func uniqueURL(in folder: URL, preferredName: String) -> URL {
+        let name = preferredName as NSString
+        return uniqueURL(in: folder, stem: name.deletingPathExtension, separator: " ", extension: name.pathExtension)
+    }
+
+    /// Returns a non-existing URL for `stem`(+`.ext`) in `folder`, disambiguating a
+    /// collision by inserting `separator``counter` before the extension — e.g.
+    /// `report 2.pdf` (separator " ") or `clip-…-2.txt` (separator "-").
+    private static func uniqueURL(in folder: URL, stem: String, separator: String, extension ext: String) -> URL {
+        let suffix = ext.isEmpty ? "" : ".\(ext)"
+        var url = folder.appendingPathComponent("\(stem)\(suffix)")
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter).\(ext)")
+            url = folder.appendingPathComponent("\(stem)\(separator)\(counter)\(suffix)")
             counter += 1
         }
         return url
