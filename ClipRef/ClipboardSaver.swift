@@ -70,6 +70,9 @@ final class ClipboardSaver {
 
         switch Self.decide(fileURL: fileURL, text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
         case .copyFile(let source):
+            guard Self.isCopyableFile(source) else {
+                return .failure("ClipRef saves files, not folders — “\(source.lastPathComponent)” is a folder or app bundle. Copy a file instead.")
+            }
             return write(extension: source.pathExtension, pasteboard: pasteboard) { destination in
                 try FileManager.default.copyItem(at: source, to: destination)
             }
@@ -112,6 +115,13 @@ final class ClipboardSaver {
         let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
         let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL]
         return urls?.first
+    }
+
+    /// A clipboard file is only copyable if it's a regular file. Folders and app bundles
+    /// (which are directories) are rejected — an `@`-reference to a directory isn't useful
+    /// to Claude Code, and a real app bundle can be huge.
+    static func isCopyableFile(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
     }
 
     /// True when the clipboard already holds one of our `@<path>` references: a single

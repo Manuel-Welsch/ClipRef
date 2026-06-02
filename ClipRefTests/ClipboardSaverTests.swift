@@ -40,6 +40,16 @@ final class ClipboardSaverTests: XCTestCase {
         XCTAssertEqual(ClipboardSaver.decide(fileURL: url, text: "ignored text", hasImage: true), .copyFile(url))
     }
 
+    func testFoldersAreNotCopyable() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("note.txt")
+        try Data("hi".utf8).write(to: file)
+        XCTAssertTrue(ClipboardSaver.isCopyableFile(file))
+        XCTAssertFalse(ClipboardSaver.isCopyableFile(dir))   // a folder/app bundle
+    }
+
     // MARK: - looksLikeReference
 
     func testReferenceDetection() {
