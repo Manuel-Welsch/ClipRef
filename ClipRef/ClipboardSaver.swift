@@ -64,29 +64,43 @@ final class ClipboardSaver {
     @discardableResult
     func saveClipboard() -> SaveResult {
         let pasteboard = NSPasteboard.general
+        let imageData = pngData(from: pasteboard)
 
-        if let text = pasteboard.string(forType: .string), !text.isEmpty {
-            // Ignore our own @<path> references, so pressing the button again with a
-            // just-created reference on the clipboard doesn't save it into a new file.
-            if Self.looksLikeReference(text) { return .noContent }
+        switch Self.decide(text: pasteboard.string(forType: .string), hasImage: imageData != nil) {
+        case .saveText(let text):
             return write(extension: Const.textExtension, pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
             }
-        }
-
-        if let png = pngData(from: pasteboard) {
+        case .saveImage:
+            guard let imageData else { return .noContent }
             return write(extension: Const.imageExtension, pasteboard: pasteboard) { url in
-                try png.write(to: url, options: .atomic)
+                try imageData.write(to: url, options: .atomic)
             }
+        case .ignore:
+            return .noContent
         }
+    }
 
-        return .noContent
+    /// What `saveClipboard` should do, decided purely from the clipboard's text and
+    /// whether an image is present: text wins, our own `@<path>` references are ignored,
+    /// otherwise an image is saved. Pure and side-effect-free, so it can be unit-tested.
+    enum SaveDecision: Equatable {
+        case saveText(String)
+        case saveImage
+        case ignore
+    }
+
+    static func decide(text: String?, hasImage: Bool) -> SaveDecision {
+        if let text, !text.isEmpty {
+            return looksLikeReference(text) ? .ignore : .saveText(text)
+        }
+        return hasImage ? .saveImage : .ignore
     }
 
     /// True when the clipboard already holds one of our `@<path>` references: a single
     /// token starting with `@` followed by an absolute (`/`) or home (`~`) path. Used to
     /// skip re-saving a reference that the previous click just put on the clipboard.
-    private static func looksLikeReference(_ text: String) -> Bool {
+    static func looksLikeReference(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("@"),
               !trimmed.contains(where: { $0.isWhitespace }) else { return false }
@@ -160,7 +174,7 @@ final class ClipboardSaver {
 
     /// A non-existing file URL named `clip-YYYY-MM-DD-HH-mm-ss.<ext>`, appending a
     /// numeric suffix if a file from the same second already exists.
-    private static func uniqueURL(in folder: URL, extension ext: String) -> URL {
+    static func uniqueURL(in folder: URL, extension ext: String) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = Const.timestampFormat
