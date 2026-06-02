@@ -74,6 +74,7 @@ Claude pulls the full trace from the file — without 300 lines flooding the con
 ## Good to know
 
 - **Where files go:** `~/Developer/clipboard-logs` by default — change it from the menu.
+- **Any file works:** copy a file in Finder (PDF, image, zip, …) and ClipRef copies it into that folder, extension intact, with the `@`-path ready to paste.
 - **Self-cleaning:** files older than 7 days are deleted automatically, so the folder
   never piles up. (`defaults write de.manuelwelsch.ClipRef retentionDays 14` keeps them
   longer.)
