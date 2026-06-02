@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
             button.action = #selector(handleClick)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-            button.toolTip = "Left-click: save clipboard to a log file · Right-click: menu"
+            button.toolTip = "Left-click: save clipboard (text or image) to a file · Right-click: menu"
         }
         enableLaunchAtLoginOnFirstRun()
         logger.cleanupOldLogs()
@@ -36,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch logger.saveClipboard() {
         case .success:
             flash(symbol: "checkmark.circle.fill", success: true)
-        case .noText:
+        case .noContent:
             flash(symbol: "exclamationmark.triangle.fill", success: false)
         case .failure(let message):
             flash(symbol: "xmark.octagon.fill", success: false)
@@ -49,21 +49,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showMenu() {
         let menu = NSMenu()
 
-        let folderItem = NSMenuItem(title: "Logs → \(logger.folderURL.path)", action: nil, keyEquivalent: "")
+        let folderItem = NSMenuItem(title: "Saves → \(logger.folderURL.path)", action: nil, keyEquivalent: "")
         folderItem.isEnabled = false
         menu.addItem(folderItem)
         menu.addItem(.separator())
 
         addItem(to: menu, title: "Save Clipboard Now", action: #selector(menuSave), key: "s")
-        addItem(to: menu, title: "Open Logs Folder", action: #selector(openFolder), key: "o")
-        addItem(to: menu, title: "Change Logs Folder…", action: #selector(changeFolder), key: "")
+        addItem(to: menu, title: "Open Folder", action: #selector(openFolder), key: "o")
+        addItem(to: menu, title: "Change Folder…", action: #selector(changeFolder), key: "")
         menu.addItem(.separator())
 
         let loginItem = addItem(to: menu, title: "Launch at Login", action: #selector(toggleLaunchAtLogin), key: "")
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Quit LogPaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit ClipRef", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // Temporarily attach the menu so a click pops it open, then detach so the
         // next left-click triggers the save action again instead of the menu.
@@ -95,7 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.allowsMultipleSelection = false
         panel.canCreateDirectories = true
         panel.prompt = "Choose"
-        panel.message = "Choose the folder where clipboard logs will be saved"
+        panel.message = "Choose the folder where saved clipboard files will be stored"
         panel.directoryURL = logger.folderURL
         NSApp.activate(ignoringOtherApps: true)
         if panel.runModal() == .OK, let url = panel.url {
@@ -138,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "LogPaste"
+        alert.messageText = "ClipRef"
         alert.informativeText = message
         alert.alertStyle = .warning
         NSApp.activate(ignoringOtherApps: true)
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func defaultImage() -> NSImage? {
-        let image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "LogPaste")
+        let image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipRef")
         image?.isTemplate = true
         return image
     }

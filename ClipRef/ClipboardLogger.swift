@@ -1,22 +1,24 @@
 import AppKit
 
-/// Result of attempting to save the clipboard to a log file.
+/// Result of attempting to save the clipboard to a file.
 enum SaveResult {
     case success(URL)
-    case noText
+    case noContent
     case failure(String)
 }
 
-/// Reads the system clipboard, writes it to a timestamped text file inside a
+/// Reads the system clipboard, writes it to a timestamped file inside a
 /// user-configurable folder, and then puts an `@`-prefixed absolute path back on
 /// the clipboard so it can be pasted straight into Claude Code as a file reference.
+///
+/// Text is saved as `.txt`; an image on the clipboard is saved as `.png`.
 final class ClipboardLogger {
     static let shared = ClipboardLogger()
 
     private let defaults = UserDefaults.standard
     private let folderKey = "logFolderPath"
 
-    /// The folder logs are written to. Defaults to `~/Developer/clipboard-logs`.
+    /// The folder files are written to. Defaults to `~/Developer/clipboard-logs`.
     var folderURL: URL {
         if let path = defaults.string(forKey: folderKey), !path.isEmpty {
             let expanded = (path as NSString).expandingTildeInPath
@@ -34,22 +36,37 @@ final class ClipboardLogger {
         defaults.set(url.path, forKey: folderKey)
     }
 
-    /// Number of days to keep log files. Override with
-    /// `defaults write de.manuelwelsch.LogPaste retentionDays <N>`.
+    /// Number of days to keep saved files. Override with
+    /// `defaults write de.manuelwelsch.ClipRef retentionDays <N>`.
     var retentionDays: Int {
         let value = defaults.integer(forKey: "retentionDays")
         return value > 0 ? value : 7
     }
 
-    /// Saves the current clipboard text to a new file and replaces the clipboard
-    /// contents with an `@<path>` reference.
+    /// Saves the clipboard to a new file and replaces the clipboard contents with
+    /// an `@<path>` reference. Text wins if present; otherwise an image is saved.
     @discardableResult
     func saveClipboard() -> SaveResult {
         let pasteboard = NSPasteboard.general
-        guard let text = pasteboard.string(forType: .string), !text.isEmpty else {
-            return .noText
+
+        if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            return write(extension: "txt", pasteboard: pasteboard) { url in
+                try Data(text.utf8).write(to: url, options: .atomic)
+            }
         }
 
+        if let png = pngData(from: pasteboard) {
+            return write(extension: "png", pasteboard: pasteboard) { url in
+                try png.write(to: url, options: .atomic)
+            }
+        }
+
+        return .noContent
+    }
+
+    /// Creates the folder, writes the file via `body`, swaps the clipboard for an
+    /// `@<path>` reference, and prunes old files.
+    private func write(extension ext: String, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
         let folder = folderURL
         do {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -57,15 +74,15 @@ final class ClipboardLogger {
             return .failure("Could not create folder:\n\(error.localizedDescription)")
         }
 
-        let fileURL = folder.appendingPathComponent(Self.makeFileName())
+        let fileURL = folder.appendingPathComponent(Self.makeFileName(extension: ext))
         do {
-            try text.write(to: fileURL, atomically: true, encoding: .utf8)
+            try body(fileURL)
         } catch {
             return .failure("Could not write file:\n\(error.localizedDescription)")
         }
 
         // Replace the clipboard with an @-reference ready to paste into Claude Code.
-        // The log text itself is already safely on disk.
+        // The saved content is already safely on disk.
         pasteboard.clearContents()
         pasteboard.setString("@\(fileURL.path)", forType: .string)
 
@@ -73,8 +90,24 @@ final class ClipboardLogger {
         return .success(fileURL)
     }
 
-    /// Deletes log files older than `retentionDays`. Only touches files this app
-    /// created (`clip-*.txt`), so it is safe even if the folder holds other files.
+    /// Extracts PNG data from the clipboard, re-encoding from TIFF or another image
+    /// representation when a direct PNG isn't present. Returns nil if there is no image.
+    private func pngData(from pasteboard: NSPasteboard) -> Data? {
+        if let png = pasteboard.data(forType: .png) {
+            return png
+        }
+        guard let image = NSImage(pasteboard: pasteboard),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+        return png
+    }
+
+    /// Deletes saved files older than `retentionDays`. Only touches files this app
+    /// created (`clip-*.txt` / `clip-*.png`), so it is safe even if the folder holds
+    /// other files.
     func cleanupOldLogs() {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(
@@ -83,10 +116,11 @@ final class ClipboardLogger {
             options: [.skipsHiddenFiles]
         ) else { return }
 
+        let keepExtensions: Set<String> = ["txt", "png"]
         let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            let name = url.lastPathComponent
-            guard name.hasPrefix("clip-"), url.pathExtension == "txt" else { continue }
+            guard url.lastPathComponent.hasPrefix("clip-"),
+                  keepExtensions.contains(url.pathExtension.lowercased()) else { continue }
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             if let modified, modified < cutoff {
                 try? fileManager.removeItem(at: url)
@@ -94,11 +128,11 @@ final class ClipboardLogger {
         }
     }
 
-    private static func makeFileName() -> String {
+    private static func makeFileName(extension ext: String) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         // Millisecond precision keeps file names unique even on rapid double-saves.
         formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
-        return "clip-\(formatter.string(from: Date())).txt"
+        return "clip-\(formatter.string(from: Date())).\(ext)"
     }
 }
