@@ -7,7 +7,7 @@ puts an `@`-reference on your clipboard. Paste that into Claude Code and it read
 file only when it actually needs to — so giant logs and images stay out of your context
 until they matter.
 
-**Without ClipRef**, pasting a 2,500-line log straight into Claude Code floods the composer:
+**Without ClipRef**, pasting a 2,500-line log straight into Claude Code floods your context:
 
 ![A 2,500-line log flooding the Claude Code composer](docs/before.png)
 
@@ -49,8 +49,9 @@ If signing fails, open `ClipRef.xcodeproj` in Xcode and pick your own team under
 ClipRef sits in your **menu bar** (a clipboard icon) — no Dock icon, no window.
 
 1. Copy anything — a log, an error message, a screenshot.
-2. **Left-click** the icon. ClipRef saves it (text → `.txt`, image → `.png`) and flashes
-   a checkmark. Your clipboard now holds an `@`-path to that file.
+2. **Left-click** the icon. ClipRef saves whatever's on the clipboard — text as `.txt`, an
+   image as `.png`, or **any file you copied** (PDF, zip, …) kept with its own extension —
+   and flashes a checkmark. Your clipboard now holds an `@`-path to that file.
 3. Switch to Claude Code and press **⌘V**. The pasted `@…` becomes a file reference.
 
 ![The pasted reference in Claude Code](docs/paste.png)
