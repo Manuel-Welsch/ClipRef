@@ -1,5 +1,4 @@
 import AppKit
-import ServiceManagement
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
@@ -25,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.toolTip = "Left-click: save clipboard (text or image) to a file · Right-click: menu"
         }
-        enableLaunchAtLoginOnFirstRun()
+        LoginItem.enableOnFirstRun()
         saver.pruneOldFiles()
     }
 
@@ -69,8 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         addItem(to: menu, title: "Change Folder…", action: #selector(changeFolder), key: "")
         menu.addItem(.separator())
 
-        let loginItem = addItem(to: menu, title: "Launch at Login", action: #selector(toggleLaunchAtLogin), key: "")
-        loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+        let loginMenuItem = addItem(to: menu, title: "Launch at Login", action: #selector(toggleLaunchAtLogin), key: "")
+        loginMenuItem.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(.separator())
 
         menu.addItem(withTitle: "Quit ClipRef", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -114,24 +113,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleLaunchAtLogin() {
         do {
-            if SMAppService.mainApp.status == .enabled {
-                try SMAppService.mainApp.unregister()
-            } else {
-                try SMAppService.mainApp.register()
-            }
+            try LoginItem.toggle()
         } catch {
             presentError("Could not change the launch-at-login setting:\n\(error.localizedDescription)")
-        }
-    }
-
-    /// Registers as a login item the first time the app runs (the user opted in).
-    /// Guarded by a flag so the user can later disable it via the menu and have it stay off.
-    private func enableLaunchAtLoginOnFirstRun() {
-        let key = "didConfigureLoginItem"
-        guard !UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.set(true, forKey: key)
-        if SMAppService.mainApp.status != .enabled {
-            try? SMAppService.mainApp.register()
         }
     }
 
