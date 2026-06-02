@@ -177,22 +177,23 @@ final class ClipboardSaver {
         return png
     }
 
-    /// Deletes saved files older than `retentionDays`. Only touches files this app
-    /// created (anything named `clip-*`), so it is safe even if the folder holds
-    /// other files.
+    /// Deletes files older than `retentionDays`, judged by the date each file was
+    /// added to the folder rather than its own modification date — a copied file keeps
+    /// the original's timestamps, so only "date added" reflects when it entered here.
+    /// Applies to every file in the folder, so original-named copies (`report.pdf`)
+    /// are cleaned up on the same schedule as `clip-*` text and image files.
     func pruneOldFiles() {
         let fileManager = FileManager.default
         guard let entries = try? fileManager.contentsOfDirectory(
             at: folderURL,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.addedToDirectoryDateKey],
             options: [.skipsHiddenFiles]
         ) else { return }
 
         let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            guard url.lastPathComponent.hasPrefix(Const.filePrefix) else { continue }
-            let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-            if let modified, modified < cutoff {
+            let added = (try? url.resourceValues(forKeys: [.addedToDirectoryDateKey]))?.addedToDirectoryDate
+            if let added, added < cutoff {
                 try? fileManager.removeItem(at: url)
             }
         }
