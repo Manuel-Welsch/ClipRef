@@ -63,7 +63,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Quit LogPaste", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit ClipRef", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // Temporarily attach the menu so a click pops it open, then detach so the
         // next left-click triggers the save action again instead of the menu.
@@ -138,7 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func presentError(_ message: String) {
         let alert = NSAlert()
-        alert.messageText = "LogPaste"
+        alert.messageText = "ClipRef"
         alert.informativeText = message
         alert.alertStyle = .warning
         NSApp.activate(ignoringOtherApps: true)
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private static func defaultImage() -> NSImage? {
-        let image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "LogPaste")
+        let image = NSImage(systemSymbolName: "doc.on.clipboard", accessibilityDescription: "ClipRef")
         image?.isTemplate = true
         return image
     }
