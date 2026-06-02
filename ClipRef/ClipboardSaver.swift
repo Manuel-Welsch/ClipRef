@@ -15,6 +15,14 @@ enum SaveResult {
 final class ClipboardSaver {
     static let shared = ClipboardSaver()
 
+    private enum Const {
+        static let filePrefix = "clip-"
+        static let timestampFormat = "yyyy-MM-dd-HH-mm-ss"
+        static let textExtension = "txt"
+        static let imageExtension = "png"
+        static let defaultRetentionDays = 7
+    }
+
     private let defaults = UserDefaults.standard
     private let folderKey = "logFolderPath"
 
@@ -36,11 +44,19 @@ final class ClipboardSaver {
         defaults.set(url.path, forKey: folderKey)
     }
 
+    /// Creates the destination folder if it does not exist and returns it.
+    @discardableResult
+    func makeDestinationFolder() throws -> URL {
+        let folder = folderURL
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }
+
     /// Number of days to keep saved files. Override with
     /// `defaults write de.manuelwelsch.ClipRef retentionDays <N>`.
     var retentionDays: Int {
         let value = defaults.integer(forKey: "retentionDays")
-        return value > 0 ? value : 7
+        return value > 0 ? value : Const.defaultRetentionDays
     }
 
     /// Saves the clipboard to a new file and replaces the clipboard contents with
@@ -53,13 +69,13 @@ final class ClipboardSaver {
             // Ignore our own @<path> references, so pressing the button again with a
             // just-created reference on the clipboard doesn't save it into a new file.
             if Self.looksLikeReference(text) { return .noContent }
-            return write(extension: "txt", pasteboard: pasteboard) { url in
+            return write(extension: Const.textExtension, pasteboard: pasteboard) { url in
                 try Data(text.utf8).write(to: url, options: .atomic)
             }
         }
 
         if let png = pngData(from: pasteboard) {
-            return write(extension: "png", pasteboard: pasteboard) { url in
+            return write(extension: Const.imageExtension, pasteboard: pasteboard) { url in
                 try png.write(to: url, options: .atomic)
             }
         }
@@ -81,9 +97,9 @@ final class ClipboardSaver {
     /// Creates the folder, writes the file via `body`, swaps the clipboard for an
     /// `@<path>` reference, and prunes old files.
     private func write(extension ext: String, pasteboard: NSPasteboard, body: (URL) throws -> Void) -> SaveResult {
-        let folder = folderURL
+        let folder: URL
         do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            folder = try makeDestinationFolder()
         } catch {
             return .failure("Could not create folder:\n\(error.localizedDescription)")
         }
@@ -130,10 +146,10 @@ final class ClipboardSaver {
             options: [.skipsHiddenFiles]
         ) else { return }
 
-        let keepExtensions: Set<String> = ["txt", "png"]
+        let keepExtensions: Set<String> = [Const.textExtension, Const.imageExtension]
         let cutoff = Date().addingTimeInterval(-Double(retentionDays) * 24 * 60 * 60)
         for url in entries {
-            guard url.lastPathComponent.hasPrefix("clip-"),
+            guard url.lastPathComponent.hasPrefix(Const.filePrefix),
                   keepExtensions.contains(url.pathExtension.lowercased()) else { continue }
             let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
             if let modified, modified < cutoff {
@@ -147,13 +163,13 @@ final class ClipboardSaver {
     private static func uniqueURL(in folder: URL, extension ext: String) -> URL {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
+        formatter.dateFormat = Const.timestampFormat
         let stamp = formatter.string(from: Date())
 
-        var url = folder.appendingPathComponent("clip-\(stamp).\(ext)")
+        var url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp).\(ext)")
         var counter = 2
         while FileManager.default.fileExists(atPath: url.path) {
-            url = folder.appendingPathComponent("clip-\(stamp)-\(counter).\(ext)")
+            url = folder.appendingPathComponent("\(Const.filePrefix)\(stamp)-\(counter).\(ext)")
             counter += 1
         }
         return url
