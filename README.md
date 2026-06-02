@@ -50,7 +50,7 @@ ClipRef sits in your **menu bar** (a clipboard icon) — no Dock icon, no window
 
 1. Copy anything — a log, an error message, a screenshot.
 2. **Left-click** the icon. ClipRef saves whatever's on the clipboard — text as `.txt`, an
-   image as `.png`, or **any file you copied** (PDF, zip, …) kept with its own extension —
+   image as `.png`, or **any file you copied** (PDF, zip, …) kept under its original name —
    and flashes a checkmark. Your clipboard now holds an `@`-path to that file.
 3. Switch to Claude Code and press **⌘V**. The pasted `@…` becomes a file reference.
 
@@ -62,7 +62,7 @@ Your app crashes. You select the whole stack trace and ⌘C, then click the Clip
 a checkmark flashes and your clipboard is now:
 
 ```
-@/Users/you/Developer/clipboard-logs/clip-2026-06-02-14-03-12.txt
+@/Users/you/Developer/clipboard-logs/clip-2026-06-02_14.03.12.txt
 ```
 
 Over in Claude Code you type **`why is this crashing?`**, press **⌘V**, and hit return.
@@ -75,10 +75,9 @@ Claude pulls the full trace from the file — without 300 lines flooding the con
 ## Good to know
 
 - **Where files go:** `~/Developer/clipboard-logs` by default — change it from the menu.
-- **Any file works:** copy a file in Finder (PDF, image, zip, …) and ClipRef copies it into that folder, extension intact, with the `@`-path ready to paste.
-- **Self-cleaning:** files older than 7 days are deleted automatically, so the folder
-  never piles up. (`defaults write de.manuelwelsch.ClipRef retentionDays 14` keeps them
-  longer.)
+- **Any file works:** copy a file in Finder (PDF, image, zip, …) and ClipRef copies it into that folder under its **original name** (`report.pdf`), with the `@`-path ready to paste. Copy a second file of the same name and it becomes `report 2.pdf`, Finder-style. (Folders and `.app` bundles are skipped — ClipRef saves files, not directories.)
+- **Big files are skipped:** anything over 100 MB isn't copied (a quick alert says so), so a giant video or disk image can't freeze the menu while it copies.
+- **Self-cleaning, and only after itself:** files ClipRef saved are deleted automatically after 7 days, so the folder never piles up — but it *only* removes files it created, so anything else you keep in that folder is left untouched. (`defaults write de.manuelwelsch.ClipRef retentionDays 14` keeps them longer.)
 - **Double-clicking is safe:** if your clipboard already holds an `@`-reference, ClipRef
   leaves it alone instead of saving the reference into a new file.
 
