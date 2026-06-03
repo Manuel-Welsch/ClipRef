@@ -22,8 +22,12 @@ ARCHIVE="$OUT/ClipRef.xcarchive"
 EXPORT="$OUT/export"
 APP="$EXPORT/ClipRef.app"
 
-VERSION=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
-  | awk -F' = ' '/ MARKETING_VERSION /{print $2; exit}')
+# Version: an explicit VERSION env wins (CI passes the git tag, e.g. 0.1.0),
+# otherwise fall back to the project's MARKETING_VERSION, then 0.0.0.
+if [ -z "${VERSION:-}" ]; then
+  VERSION=$(xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -showBuildSettings 2>/dev/null \
+    | awk -F' = ' '/ MARKETING_VERSION /{print $2; exit}')
+fi
 VERSION="${VERSION:-0.0.0}"
 ZIP="$OUT/ClipRef-$VERSION.zip"
 
@@ -32,7 +36,7 @@ rm -rf "$OUT"
 xcodebuild archive \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
   -archivePath "$ARCHIVE" -derivedDataPath "$OUT/dd" \
-  DEVELOPMENT_TEAM="$TEAM" -allowProvisioningUpdates >/dev/null
+  DEVELOPMENT_TEAM="$TEAM" MARKETING_VERSION="$VERSION" -allowProvisioningUpdates >/dev/null
 
 echo "▶︎ Exporting Developer ID-signed app…"
 xcodebuild -exportArchive \

@@ -1,0 +1,41 @@
+name: Release
+
+# Cut a release by pushing a tag:  git tag v0.1.0 && git push origin v0.1.0
+# The tag drives the version (v0.1.0 -> 0.1.0). Runs on the self-hosted macOS
+# runner, so the Developer ID cert and the NOTARY notarytool profile come from
+# the runner's login keychain — no GitHub secrets needed.
+#
+# NOTE: this works while the runner runs as the logged-in user (login keychain
+# unlocked, codesign already allowed). On a future headless/service runner, add
+# a `security unlock-keychain` + `security set-key-partition-list` step so
+# codesign/notarytool don't block on a keychain prompt.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, notarize & publish
+    runs-on: [self-hosted, macOS]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build, sign, notarize, staple
+        run: VERSION="${GITHUB_REF_NAME#v}" ./scripts/release.sh
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP="build/release/ClipRef-${VERSION}.zip"
+          SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+          NOTES="Notarized, stapled Developer ID build. sha256: \`${SHA}\`"
+          PRERELEASE=""
+          case "$VERSION" in 0.*) PRERELEASE="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" "$ZIP" \
+            --title "ClipRef ${VERSION}" --notes "$NOTES" --verify-tag $PRERELEASE
