@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: [self-hosted, macOS]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Xcode version
+        run: xcodebuild -version
+
+      - name: Run tests
+        run: |
+          xcodebuild test \
+            -project ClipRef.xcodeproj \
+            -scheme ClipRef \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
