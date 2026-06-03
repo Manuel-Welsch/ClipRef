@@ -31,7 +31,7 @@ fi
 VERSION="${VERSION:-0.0.0}"
 ZIP="$OUT/ClipRef-$VERSION.zip"
 
-echo "▶︎ Archiving ClipRef $VERSION…"
+echo "▶︎ Archiving ClipRef ${VERSION}…"
 rm -rf "$OUT"
 xcodebuild archive \
   -project "$PROJECT" -scheme "$SCHEME" -configuration Release \
