@@ -12,12 +12,20 @@ concurrency:
 jobs:
   test:
     name: Unit tests
-    runs-on: [self-hosted, macOS]
+    # GitHub-hosted, ephemeral runner — fork PR code runs in a throwaway VM and
+    # never touches the self-hosted release runner (which holds the Developer ID
+    # signing keys). Public repos get free macOS runner minutes.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Xcode version
-        run: xcodebuild -version
+      - name: Select newest installed Xcode
+        # The app icon is an Icon Composer document, so the build needs Xcode 26+.
+        # Pick the highest-versioned Xcode on the runner image; fall back to default.
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$latest" ] && sudo xcode-select -s "$latest"
+          xcodebuild -version
 
       - name: Run tests
         run: |
