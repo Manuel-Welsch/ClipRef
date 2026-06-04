@@ -12,12 +12,28 @@ concurrency:
 jobs:
   test:
     name: Unit tests
-    runs-on: [self-hosted, macOS]
+    # GitHub-hosted, ephemeral runner — fork PR code runs in a throwaway VM and
+    # never touches the self-hosted release runner (which holds the Developer ID
+    # signing keys). Public repos get free macOS runner minutes.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
 
-      - name: Xcode version
-        run: xcodebuild -version
+      - name: Select newest installed Xcode
+        # The app icon is an Icon Composer document, so the build needs Xcode 26+.
+        # Pick the highest-versioned Xcode on the runner image; fall back to default.
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          [ -n "$latest" ] && sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - name: Drop the app icon for CI
+        # The app icon is an Icon Composer (.icon) document; actool's renderer
+        # crashes on the headless GitHub runner (no window server / GPU). The unit
+        # tests don't need the icon, so remove it from this throwaway checkout and
+        # blank the app-icon build setting below. The real icon still ships via the
+        # self-hosted release build.
+        run: rm -rf ClipRef/ClipRef.icon
 
       - name: Run tests
         run: |
@@ -25,4 +41,5 @@ jobs:
             -project ClipRef.xcodeproj \
             -scheme ClipRef \
             -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            ASSETCATALOG_COMPILER_APPICON_NAME=
