@@ -9,6 +9,13 @@ name: Release
 # unlocked, codesign already allowed). On a future headless/service runner, add
 # a `security unlock-keychain` + `security set-key-partition-list` step so
 # codesign/notarytool don't block on a keychain prompt.
+#
+# After publishing, the cask in the Homebrew tap (Manuel-Welsch/homebrew-tap,
+# Casks/clipref.rb) is bumped to the new version + sha256. That push goes to a
+# *different* repo, so it needs a HOMEBREW_TAP_TOKEN secret — the default
+# GITHUB_TOKEN is scoped to this repo only. Create a fine-grained PAT (or
+# classic token) with contents:write on Manuel-Welsch/homebrew-tap and add it
+# as the repo secret HOMEBREW_TAP_TOKEN. Without it, the bump step is skipped.
 
 on:
   push:
@@ -39,3 +46,32 @@ jobs:
           case "$VERSION" in 0.*) PRERELEASE="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" "$ZIP" \
             --title "ClipRef ${VERSION}" --notes "$NOTES" --verify-tag $PRERELEASE
+
+      - name: Bump Homebrew cask
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set — skipping cask bump." >&2
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          ZIP="build/release/ClipRef-${VERSION}.zip"
+          SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+          TAP="$(mktemp -d)"
+          git clone --depth 1 \
+            "https://x-access-token:${GH_TOKEN}@github.com/Manuel-Welsch/homebrew-tap.git" "$TAP"
+          # Rewrite only the version + sha256 lines; the rest of the cask is hand-maintained.
+          /usr/bin/sed -i '' -E \
+            -e "s/  version \"[^\"]*\"/  version \"${VERSION}\"/" \
+            -e "s/  sha256 \"[^\"]*\"/  sha256 \"${SHA}\"/" \
+            "$TAP/Casks/clipref.rb"
+          cd "$TAP"
+          if git diff --quiet; then
+            echo "Cask already at ${VERSION} — nothing to push."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -aqm "clipref ${VERSION}"
+          git push
