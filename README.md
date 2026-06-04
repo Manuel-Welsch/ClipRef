@@ -17,18 +17,18 @@ until they matter.
 
 ## Install
 
-> **Not published yet.** When it's released, installing will be one line:
->
-> ```sh
-> brew install --cask clipref
-> ```
->
-> *(or download `ClipRef.app` from the Releases page and drag it to Applications.)*
+Requires macOS 14 (Sonoma) or later. Install with [Homebrew](https://brew.sh):
 
-Until then, build it yourself — macOS 14+ and Xcode 16+:
+```sh
+brew install --cask manuel-welsch/tap/clipref
+```
+
+Or download `ClipRef.app` from the [Releases page](https://github.com/Manuel-Welsch/ClipRef/releases) and drag it to Applications.
 
 <details>
 <summary>Build from source</summary>
+
+macOS 14+ and Xcode 16+:
 
 ```sh
 git clone https://github.com/Manuel-Welsch/ClipRef.git
