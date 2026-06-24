@@ -110,6 +110,43 @@ internal sealed class ClipboardSaver
         return candidate;
     }
 
+    /// <summary>
+    /// True when the clipboard file at <paramref name="path"/> is a regular file and may be
+    /// copied. Directories (folders, and the Windows equivalents of macOS app bundles) are
+    /// rejected — an @-reference to a directory is useless to Claude Code. The filesystem fact
+    /// is supplied by <paramref name="getAttributes"/>: <c>null</c> (the path is missing or
+    /// unreadable) yields false. Only the <see cref="FileAttributes.Directory"/> flag is
+    /// checked, so symlinks and junctions are not rejected in this port yet.
+    /// </summary>
+    internal static bool IsCopyableFile(string path, Func<string, FileAttributes?> getAttributes)
+    {
+        var attributes = getAttributes(path);
+        if (attributes is null)
+        {
+            return false;
+        }
+
+        return (attributes.Value & FileAttributes.Directory) == 0;
+    }
+
+    /// <summary>
+    /// True when the file at <paramref name="path"/> is within <paramref name="maxBytes"/>,
+    /// guarding against copying a huge file synchronously and freezing the menu. The size is
+    /// supplied by <paramref name="getSize"/>; if it can't be read (<c>null</c>) we don't block
+    /// (return true) — the limit is a best-effort hang guard, not a hard gate.
+    /// <paramref name="maxBytes"/> defaults to the 100 MB cap.
+    /// </summary>
+    internal static bool FitsSizeLimit(string path, Func<string, long?> getSize, long maxBytes = Const.MaxCopyableBytes)
+    {
+        var size = getSize(path);
+        if (size is null)
+        {
+            return true;
+        }
+
+        return size.Value <= maxBytes;
+    }
+
     /// <summary>Naming constants mirrored from the macOS reference.</summary>
     private static class Const
     {
@@ -118,5 +155,10 @@ internal sealed class ClipboardSaver
         // Dashes for the date, dots for the time (mirrors macOS screenshot names) so the two read
         // apart at a glance; '_' between. Shell- and @-reference-safe, and sortable.
         internal const string TimestampFormat = "yyyy-MM-dd'_'HH.mm.ss";
+
+        // Copies run synchronously on the UI thread, so cap the size to keep a huge file from
+        // freezing the menu while it copies. 100 MB (decimal, matches Finder); long because
+        // file sizes can exceed Int32.
+        internal const long MaxCopyableBytes = 100L * 1_000_000;
     }
 }
