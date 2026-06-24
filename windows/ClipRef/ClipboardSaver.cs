@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace ClipRef;
 
 /// <summary>
@@ -61,5 +63,60 @@ internal sealed class ClipboardSaver
             && char.IsAsciiLetter(path[0])
             && path[1] == ':'
             && path[2] == '\\';
+    }
+
+    /// <summary>
+    /// A non-colliding path named <c>clip-&lt;timestamp&gt;.&lt;extension&gt;</c> inside
+    /// <paramref name="folder"/>, used for saved text and images. <paramref name="now"/> is
+    /// formatted with the invariant culture so the name is stable; <paramref name="exists"/>
+    /// reports whether a candidate is already taken, appending <c>-2</c>, <c>-3</c>, … on collision.
+    /// </summary>
+    internal static string UniqueGeneratedPath(string folder, string extension, DateTime now, Func<string, bool> exists)
+    {
+        var stamp = now.ToString(Const.TimestampFormat, CultureInfo.InvariantCulture);
+        return UniquePath(folder, Const.FilePrefix + stamp, "-", extension, exists);
+    }
+
+    /// <summary>
+    /// A non-colliding path inside <paramref name="folder"/> that keeps
+    /// <paramref name="preferredName"/> as-is (used for copied files), adding a Finder-style
+    /// <c> 2</c>, <c> 3</c>, … before the extension when <paramref name="exists"/> reports a
+    /// clash (<c>report 2.pdf</c>).
+    /// </summary>
+    internal static string UniquePreferredPath(string folder, string preferredName, Func<string, bool> exists)
+    {
+        var stem = Path.GetFileNameWithoutExtension(preferredName);
+        var extension = Path.GetExtension(preferredName).TrimStart('.');
+        return UniquePath(folder, stem, " ", extension, exists);
+    }
+
+    /// <summary>
+    /// Returns the first path of the form <c>stem(.extension)</c> in <paramref name="folder"/> for
+    /// which <paramref name="exists"/> is false, disambiguating a collision by inserting
+    /// <paramref name="separator"/> and a counter (from 2) before the extension. An empty extension
+    /// yields no trailing dot.
+    /// </summary>
+    private static string UniquePath(string folder, string stem, string separator, string extension, Func<string, bool> exists)
+    {
+        var suffix = extension.Length == 0 ? string.Empty : "." + extension;
+        var candidate = Path.Combine(folder, stem + suffix);
+        var counter = 2;
+        while (exists(candidate))
+        {
+            candidate = Path.Combine(folder, $"{stem}{separator}{counter}{suffix}");
+            counter++;
+        }
+
+        return candidate;
+    }
+
+    /// <summary>Naming constants mirrored from the macOS reference.</summary>
+    private static class Const
+    {
+        internal const string FilePrefix = "clip-";
+
+        // Dashes for the date, dots for the time (mirrors macOS screenshot names) so the two read
+        // apart at a glance; '_' between. Shell- and @-reference-safe, and sortable.
+        internal const string TimestampFormat = "yyyy-MM-dd'_'HH.mm.ss";
     }
 }
