@@ -159,4 +159,68 @@ public class ClipboardSaverTests
             @"C:\logs\README 2",
             ClipboardSaver.UniquePreferredPath(Folder, "README", exists));
     }
+
+    // isCopyableFile — only regular files are copyable; directories are rejected.
+    // The filesystem fact is injected (the path itself is irrelevant), so no disk access.
+
+    private const string FilePath = @"C:\logs\report.pdf";
+
+    [Fact]
+    public void RegularFileIsCopyable()
+    {
+        Assert.True(ClipboardSaver.IsCopyableFile(FilePath, _ => FileAttributes.Normal));
+    }
+
+    [Fact]
+    public void DirectoryIsNotCopyable()
+    {
+        Assert.False(ClipboardSaver.IsCopyableFile(FilePath, _ => FileAttributes.Directory));
+    }
+
+    [Fact]
+    public void DirectoryWithExtraFlagsIsNotCopyable()
+    {
+        Assert.False(ClipboardSaver.IsCopyableFile(FilePath, _ => FileAttributes.Directory | FileAttributes.ReadOnly));
+    }
+
+    [Fact]
+    public void MissingOrUnreadableFileIsNotCopyable()
+    {
+        Assert.False(ClipboardSaver.IsCopyableFile(FilePath, _ => (FileAttributes?)null));
+    }
+
+    [Fact]
+    public void ReparsePointFileIsStillCopyable()
+    {
+        // Decision (b): only directories are rejected for now, so a symlink/junction
+        // pointing at a file is allowed. Reparse-point handling, if ever needed, comes
+        // with the Phase 2 real-stat wrapper.
+        Assert.True(ClipboardSaver.IsCopyableFile(FilePath, _ => FileAttributes.ReparsePoint));
+    }
+
+    // fitsSizeLimit — best-effort guard against copying a huge file synchronously.
+
+    [Theory]
+    [InlineData(50L, 100L, true)]    // below the limit
+    [InlineData(100L, 100L, true)]   // exactly at the limit (<=)
+    [InlineData(101L, 100L, false)]  // above the limit
+    public void FitsSizeLimitComparesAgainstMaxBytes(long size, long maxBytes, bool expected)
+    {
+        Assert.Equal(expected, ClipboardSaver.FitsSizeLimit(FilePath, _ => size, maxBytes));
+    }
+
+    [Fact]
+    public void UnreadableSizeDoesNotBlock()
+    {
+        // If the size can't be read we don't block the copy (the guard is best-effort).
+        Assert.True(ClipboardSaver.FitsSizeLimit(FilePath, _ => (long?)null, maxBytes: 100));
+    }
+
+    [Fact]
+    public void DefaultLimitIsHundredMegabytesDecimal()
+    {
+        // maxBytes omitted → the real Const.MaxCopyableBytes (100 * 1_000_000).
+        Assert.True(ClipboardSaver.FitsSizeLimit(FilePath, _ => 100_000_000L));
+        Assert.False(ClipboardSaver.FitsSizeLimit(FilePath, _ => 100_000_001L));
+    }
 }
