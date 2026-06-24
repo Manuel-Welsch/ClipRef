@@ -32,6 +32,16 @@ internal sealed class ClipboardSaver
     }
 
     /// <summary>
+    /// Classifies one clipboard read. Delegates to the precedence logic, treating a non-null
+    /// <see cref="ClipboardSnapshot.ImagePng"/> (even an empty array) as an image being present.
+    /// The snapshot-to-decision bridge consumed by the save action and the read tests.
+    /// </summary>
+    internal static SaveDecision Decide(ClipboardSnapshot snapshot)
+    {
+        return Decide(snapshot.FilePath, snapshot.Text, snapshot.ImagePng is not null);
+    }
+
+    /// <summary>
     /// True when <paramref name="text"/> already holds one of our @-path references: a single
     /// token starting with '@' followed by a Windows absolute path. Used to skip re-saving a
     /// reference that the previous click just put on the clipboard.
