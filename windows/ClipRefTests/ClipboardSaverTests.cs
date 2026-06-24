@@ -11,6 +11,18 @@ namespace ClipRefTests;
 /// </summary>
 public class ClipboardSaverTests
 {
+    // Shared fixtures for the uniqueURL tests: a fixed folder/time so the generated
+    // name is deterministic, and a predicate built from a set of already-taken paths
+    // standing in for the filesystem (no disk access).
+    private const string Folder = @"C:\logs";
+    private static readonly DateTime FixedTime = new(2026, 6, 24, 14, 30, 5);
+
+    private static Func<string, bool> Taken(params string[] paths)
+    {
+        var set = new HashSet<string>(paths);
+        return p => set.Contains(p);
+    }
+
     // decide(filePath:text:hasImage:)
 
     [Fact]
@@ -80,5 +92,71 @@ public class ClipboardSaverTests
     public void LooksLikeReferenceDetectsWindowsReferencesOnly(string text, bool expected)
     {
         Assert.Equal(expected, ClipboardSaver.LooksLikeReference(text));
+    }
+
+    // uniqueURL — generated clip-<timestamp>.<ext> names
+
+    [Fact]
+    public void GeneratedNameUsesClipPrefixStampAndExtension()
+    {
+        Assert.Equal(
+            @"C:\logs\clip-2026-06-24_14.30.05.txt",
+            ClipboardSaver.UniqueGeneratedPath(Folder, "txt", FixedTime, _ => false));
+    }
+
+    [Fact]
+    public void GeneratedImageNameUsesGivenExtension()
+    {
+        Assert.Equal(
+            @"C:\logs\clip-2026-06-24_14.30.05.png",
+            ClipboardSaver.UniqueGeneratedPath(Folder, "png", FixedTime, _ => false));
+    }
+
+    [Fact]
+    public void GeneratedNameAppendsCounterOnCollision()
+    {
+        var exists = Taken(@"C:\logs\clip-2026-06-24_14.30.05.txt");
+        Assert.Equal(
+            @"C:\logs\clip-2026-06-24_14.30.05-2.txt",
+            ClipboardSaver.UniqueGeneratedPath(Folder, "txt", FixedTime, exists));
+    }
+
+    [Fact]
+    public void GeneratedNameSkipsToThirdOnDoubleCollision()
+    {
+        var exists = Taken(
+            @"C:\logs\clip-2026-06-24_14.30.05.txt",
+            @"C:\logs\clip-2026-06-24_14.30.05-2.txt");
+        Assert.Equal(
+            @"C:\logs\clip-2026-06-24_14.30.05-3.txt",
+            ClipboardSaver.UniqueGeneratedPath(Folder, "txt", FixedTime, exists));
+    }
+
+    // uniqueURL — preferred (original) names with Finder-style " 2" dedup
+
+    [Theory]
+    [InlineData(new string[0], @"C:\logs\report.pdf")]                                                 // free → kept as-is
+    [InlineData(new[] { @"C:\logs\report.pdf" }, @"C:\logs\report 2.pdf")]                             // one collision → " 2"
+    [InlineData(new[] { @"C:\logs\report.pdf", @"C:\logs\report 2.pdf" }, @"C:\logs\report 3.pdf")]    // two → " 3"
+    public void PreferredNameDedupesFinderStyle(string[] taken, string expected)
+    {
+        Assert.Equal(expected, ClipboardSaver.UniquePreferredPath(Folder, "report.pdf", Taken(taken)));
+    }
+
+    [Fact]
+    public void PreferredNameWithoutExtensionKeptAsIs()
+    {
+        Assert.Equal(
+            @"C:\logs\README",
+            ClipboardSaver.UniquePreferredPath(Folder, "README", _ => false));
+    }
+
+    [Fact]
+    public void PreferredNameWithoutExtensionDedupesWithoutTrailingDot()
+    {
+        var exists = Taken(@"C:\logs\README");
+        Assert.Equal(
+            @"C:\logs\README 2",
+            ClipboardSaver.UniquePreferredPath(Folder, "README", exists));
     }
 }
