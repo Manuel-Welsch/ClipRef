@@ -15,6 +15,15 @@
     <EmbeddedResource Include="Assets\ClipRef.ico">
       <LogicalName>ClipRef.ico</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Assets\success.ico">
+      <LogicalName>ClipRef.success.ico</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\warning.ico">
+      <LogicalName>ClipRef.warning.ico</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\failure.ico">
+      <LogicalName>ClipRef.failure.ico</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>
