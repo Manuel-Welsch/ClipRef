@@ -2,10 +2,11 @@ namespace ClipRef;
 
 /// <summary>
 /// The tray menu's actions, kept free of any WinForms type so they are unit-testable: save the
-/// clipboard, open the destination folder (creating it first), and change the folder via a picker
-/// (persisting only a real selection). The OS touch-points — opening Explorer and showing the folder
-/// dialog — sit behind the <see cref="IFolderLauncher"/> / <see cref="IFolderPicker"/> seams, so the
-/// WinForms host stays the untested shell (ADR-0009).
+/// clipboard (presenting its outcome), open the destination folder (creating it first), and change the
+/// folder via a picker (persisting only a real selection). The OS touch-points — opening Explorer,
+/// showing the folder dialog, and presenting save feedback — sit behind the <see cref="IFolderLauncher"/>,
+/// <see cref="IFolderPicker"/>, and <see cref="ISaveFeedback"/> seams, so the WinForms host stays the
+/// untested shell (ADR-0009/0010).
 /// </summary>
 internal sealed class TrayActions
 {
@@ -14,27 +15,30 @@ internal sealed class TrayActions
     private readonly IFileSystem _fileSystem;
     private readonly IFolderLauncher _folderLauncher;
     private readonly IFolderPicker _folderPicker;
+    private readonly ISaveFeedback _feedback;
 
     internal TrayActions(
         ClipboardSaveService service,
         Settings settings,
         IFileSystem fileSystem,
         IFolderLauncher folderLauncher,
-        IFolderPicker folderPicker)
+        IFolderPicker folderPicker,
+        ISaveFeedback feedback)
     {
         _service = service;
         _settings = settings;
         _fileSystem = fileSystem;
         _folderLauncher = folderLauncher;
         _folderPicker = folderPicker;
+        _feedback = feedback;
     }
 
     /// <summary>The folder saves currently go to — shown in the menu header.</summary>
     internal string CurrentFolder => _settings.FolderPath;
 
-    /// <summary>Saves the clipboard now. The <see cref="SaveResult"/> is discarded — on-screen
-    /// feedback (icon flash, sounds, error dialog) is a later item.</summary>
-    internal void SaveNow() => _service.Save();
+    /// <summary>Saves the clipboard now and presents the outcome — an icon flash, a system sound, and
+    /// (on failure) an error dialog — through the <see cref="ISaveFeedback"/> seam.</summary>
+    internal void SaveNow() => _feedback.Present(SaveFeedback.For(_service.Save()));
 
     /// <summary>
     /// Opens the destination folder in the OS shell, creating it first so a fresh profile opens a real

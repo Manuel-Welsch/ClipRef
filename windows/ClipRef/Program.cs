@@ -21,9 +21,9 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
-        var (service, actions) = CompositionRoot.CreateTrayApp();
+        var (service, actions, feedback) = CompositionRoot.CreateTrayApp();
         AppStartup.RunLaunchTasks(service);
 
-        Application.Run(new TrayApplicationContext(actions));
+        Application.Run(new TrayApplicationContext(actions, feedback));
     }
 }

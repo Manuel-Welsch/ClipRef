@@ -14,13 +14,15 @@ internal static class CompositionRoot
     /// shared by the save service and the menu actions, so a folder changed via the menu is seen by the
     /// next save. Returns the service (for the launch-time prune) and the actions (for the host).
     /// </summary>
-    internal static (ClipboardSaveService Service, TrayActions Actions) CreateTrayApp()
+    internal static (ClipboardSaveService Service, TrayActions Actions, WinFormsSaveFeedback Feedback) CreateTrayApp()
     {
         var settings = new Settings(new JsonSettingsStore(JsonSettingsStore.DefaultFilePath));
         var fileSystem = new FileSystem();
         var service = BuildService(settings, fileSystem);
-        var actions = new TrayActions(service, settings, fileSystem, new ExplorerFolderLauncher(), new WinFormsFolderPicker());
-        return (service, actions);
+        var feedback = new WinFormsSaveFeedback();
+        var actions = new TrayActions(
+            service, settings, fileSystem, new ExplorerFolderLauncher(), new WinFormsFolderPicker(), feedback);
+        return (service, actions, feedback);
     }
 
     /// <summary>A standalone save service for the headless <c>--save-once</c> mode (a later item).</summary>

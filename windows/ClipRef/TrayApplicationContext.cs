@@ -7,20 +7,23 @@ namespace ClipRef;
 ///
 /// A single left-click saves the clipboard; a right-click opens the context menu (Save Clipboard Now,
 /// Open Folder, Change Folder…, Launch at Login, Quit). All behavior is delegated to the WinForms-free
-/// <see cref="TrayActions"/>, so this host stays thin integration glue (ADR-0009). Save-outcome
-/// feedback (icon flash, sounds, error dialog) is a later item, as is the live launch-at-login
-/// registry wiring — the menu entry is a disabled placeholder for now.
+/// <see cref="TrayActions"/>, so this host stays thin integration glue (ADR-0009). A save flashes the
+/// tray icon, plays a sound, and shows an error dialog on failure via the injected
+/// <see cref="WinFormsSaveFeedback"/> adapter (bound to this icon through <see cref="WinFormsSaveFeedback.Attach"/>).
+/// The live launch-at-login registry wiring is a later item — that menu entry is a disabled placeholder for now.
 /// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly TrayActions _actions;
+    private readonly WinFormsSaveFeedback _feedback;
     private readonly Icon _icon;
     private readonly NotifyIcon _trayIcon;
     private ToolStripMenuItem _folderHeader = null!;
 
-    public TrayApplicationContext(TrayActions actions)
+    public TrayApplicationContext(TrayActions actions, WinFormsSaveFeedback feedback)
     {
         _actions = actions;
+        _feedback = feedback;
         _icon = LoadTrayIcon();
         _trayIcon = new NotifyIcon
         {
@@ -29,15 +32,12 @@ internal sealed class TrayApplicationContext : ApplicationContext
             Visible = true,
             ContextMenuStrip = BuildMenu(),
         };
+        // Bind the feedback adapter to the live tray icon now that it exists, so it can flash and restore.
+        _feedback.Attach(_trayIcon, _icon);
         _trayIcon.MouseClick += OnTrayIconClick;
     }
 
-    private static Icon LoadTrayIcon()
-    {
-        using var stream = typeof(TrayApplicationContext).Assembly.GetManifestResourceStream("ClipRef.ico")
-            ?? throw new InvalidOperationException("Embedded tray icon 'ClipRef.ico' is missing.");
-        return new Icon(stream);
-    }
+    private static Icon LoadTrayIcon() => EmbeddedIcon.Load("ClipRef.ico");
 
     private void OnTrayIconClick(object? sender, MouseEventArgs e)
     {
@@ -82,6 +82,8 @@ internal sealed class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            // Adapter first: it stops its restore timer, so no pending tick touches a disposed tray icon.
+            _feedback.Dispose();
             _trayIcon.Dispose();
             _icon.Dispose();
         }
