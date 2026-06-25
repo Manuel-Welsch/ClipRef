@@ -8,6 +8,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ClipRef</RootNamespace>
     <AssemblyName>ClipRef</AssemblyName>
+    <ApplicationIcon>Assets\ClipRef.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\ClipRef.ico">
+      <LogicalName>ClipRef.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
 
 </Project>
