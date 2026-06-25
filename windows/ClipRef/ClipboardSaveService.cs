@@ -4,10 +4,11 @@ namespace ClipRef;
 /// Orchestrates the save action: reads the clipboard, classifies it via
 /// <see cref="ClipboardSaver.Decide(ClipboardSnapshot)"/>, writes the payload to a uniquely-named
 /// file in the destination folder, stamps it with its NTFS-ADS ownership tag, and puts an
-/// <c>@&lt;path&gt;</c> reference back on the clipboard. Ports the write half of the macOS
-/// <c>saveClipboard</c> (the <c>write</c> helper); prune is a later port item. All disk, tag, and
-/// clipboard access goes through the injected seams, so the flow is unit-testable; the clock makes
-/// the timestamped name and the ownership tag deterministic.
+/// <c>@&lt;path&gt;</c> reference back on the clipboard, then prunes expired tagged files. Ports the
+/// write half of the macOS <c>saveClipboard</c> (the <c>write</c> helper) plus its trailing
+/// <c>pruneOldFiles</c>. All disk, tag, and clipboard access goes through the injected seams, so the
+/// flow is unit-testable; the clock makes the timestamped name, the ownership tag, and the prune
+/// cutoff deterministic.
 /// </summary>
 internal sealed class ClipboardSaveService
 {
@@ -126,6 +127,42 @@ internal sealed class ClipboardSaveService
         }
 
         _clipboardWriter.SetText("@" + destination);
+
+        // Self-cleaning runs on every successful save (macOS saveClipboard line 185): the content is
+        // already safely on disk and the @-reference is back on the clipboard. Best-effort and never
+        // throws, so it cannot turn a completed save into a failure.
+        PruneOldFiles();
         return new SaveResult.Saved(destination);
+    }
+
+    /// <summary>
+    /// Deletes saved files older than <see cref="Settings.RetentionDays"/>, trusting the ownership tag
+    /// alone: a file goes only when <see cref="IFileTagger.SavedDate"/> returns an instant strictly
+    /// older than the cutoff (<c>now − retentionDays</c>). Untagged or unparseable files — anything the
+    /// user keeps in the folder — are never touched, and filesystem timestamps are never consulted
+    /// (ports macOS <c>pruneOldFiles</c>). Best-effort throughout: a missing/unreadable folder
+    /// enumerates empty and a single file that won't delete is skipped, so the sweep always finishes
+    /// and never throws.
+    /// </summary>
+    internal void PruneOldFiles()
+    {
+        // The cutoff and the tag are compared by absolute instant; NtfsFileTagger stores the tag as
+        // UTC, so Phase 3 must inject a UTC clock (() => DateTime.UtcNow) for the two to share a basis.
+        var cutoff = _clock() - TimeSpan.FromDays(_settings.RetentionDays);
+        foreach (var path in _fileSystem.EnumerateFiles(_settings.FolderPath))
+        {
+            try
+            {
+                if (_fileTagger.SavedDate(path) is { } savedAt && savedAt < cutoff)
+                {
+                    _fileSystem.DeleteFile(path);
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                // Best-effort per file: a locked or permission-denied file is skipped so the rest of
+                // the sweep still runs (parity with macOS try? on removeItem).
+            }
+        }
     }
 }

@@ -9,6 +9,9 @@ namespace ClipRef;
 /// and <see cref="ClipboardSaver.FitsSizeLimit"/> already expect. The production implementation
 /// is <see cref="FileSystem"/>; tests use an in-memory double. Mirrors the
 /// <see cref="ISettingsStore"/> and <see cref="IClipboardReader"/> seams.
+/// <see cref="EnumerateFiles"/> (top-level, non-recursive; empty on a missing/unreadable folder,
+/// like the <c>null</c>-returning readers) and <see cref="DeleteFile"/> back the prune sweep — the
+/// orchestrator isolates a single delete failure, so this seam lets it throw.
 /// </summary>
 internal interface IFileSystem
 {
@@ -25,4 +28,8 @@ internal interface IFileSystem
     FileAttributes? GetAttributes(string path);
 
     long? GetSize(string path);
+
+    IEnumerable<string> EnumerateFiles(string folder);
+
+    void DeleteFile(string path);
 }

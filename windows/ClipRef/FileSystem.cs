@@ -5,7 +5,10 @@ namespace ClipRef;
 /// <see cref="Directory"/>. Thin and STA-free but disk-bound, so it is verified manually / at
 /// integration (like <see cref="JsonSettingsStore"/>'s production path) rather than unit-tested.
 /// <see cref="GetAttributes"/> and <see cref="GetSize"/> swallow the expected missing/unreadable
-/// failures and return <c>null</c>, mirroring the macOS <c>try?</c> best-effort reads.
+/// failures and return <c>null</c>, mirroring the macOS <c>try?</c> best-effort reads;
+/// <see cref="EnumerateFiles"/> likewise swallows to an empty sequence. <see cref="DeleteFile"/> is a
+/// thin <see cref="File.Delete"/> that lets failures throw — the prune sweep isolates a single bad
+/// file itself, keeping the per-file best-effort decision in one place.
 /// </summary>
 internal sealed class FileSystem : IFileSystem
 {
@@ -42,4 +45,21 @@ internal sealed class FileSystem : IFileSystem
             return null;
         }
     }
+
+    public IEnumerable<string> EnumerateFiles(string folder)
+    {
+        try
+        {
+            // Materialize eagerly so a missing/unreadable folder is swallowed here (parity with
+            // Swift's `guard let entries = try? contentsOfDirectory ... else { return }`), not lazily
+            // mid-iteration. Top-level only — Directory.EnumerateFiles never recurses by default.
+            return Directory.EnumerateFiles(folder).ToArray();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    public void DeleteFile(string path) => File.Delete(path);
 }
