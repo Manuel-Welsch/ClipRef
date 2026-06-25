@@ -158,13 +158,18 @@ internal sealed class ClipboardSaver
     }
 
     /// <summary>Naming constants mirrored from the macOS reference.</summary>
-    private static class Const
+    internal static class Const
     {
         internal const string FilePrefix = "clip-";
 
         // Dashes for the date, dots for the time (mirrors macOS screenshot names) so the two read
         // apart at a glance; '_' between. Shell- and @-reference-safe, and sortable.
         internal const string TimestampFormat = "yyyy-MM-dd'_'HH.mm.ss";
+
+        // File extensions for saved text and images (macOS Const.textExtension / imageExtension).
+        internal const string TextExtension = "txt";
+
+        internal const string ImageExtension = "png";
 
         // Copies run synchronously on the UI thread, so cap the size to keep a huge file from
         // freezing the menu while it copies. 100 MB (decimal, matches Finder); long because
