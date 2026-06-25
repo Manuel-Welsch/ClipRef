@@ -307,4 +307,128 @@ public class ClipboardSaveServiceTests
         Assert.Equal<SaveResult>(new SaveResult.Saved(expected), result);
         Assert.Equal("@" + expected, writer.LastText);
     }
+
+    // ---- PruneOldFiles: deletes only our own expired files, by the tag alone ----
+    //
+    // Mirrors ClipRefTests/ClipboardSaverTests.swift testPruneDeletesOnlyOurExpiredFiles. With the
+    // default 7-day retention and the fixed clock, the cutoff is FixedClock - 7 days; a file is
+    // pruned only when its tagged save date is strictly older than that. SeedExisting stands in for
+    // a file already in the folder; the tagger stamps the (known) save date prune reads back.
+
+    private static InMemoryFileTagger TaggerWith(params (string Path, DateTime SavedAt)[] tags)
+    {
+        var tagger = new InMemoryFileTagger();
+        foreach (var (path, savedAt) in tags)
+        {
+            tagger.TagAsSaved(path, savedAt);
+        }
+
+        return tagger;
+    }
+
+    [Fact]
+    public void Prune_DeletesExpiredTaggedFile()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var expired = Path.Combine(Folder, "old.txt");
+        fileSystem.SeedExisting(expired);
+        var tagger = TaggerWith((expired, FixedClock.AddDays(-10)));
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), tagger);
+
+        service.PruneOldFiles();
+
+        Assert.False(fileSystem.Exists(expired));
+        Assert.True(fileSystem.Deleted(expired));
+    }
+
+    [Fact]
+    public void Prune_KeepsRecentTaggedFile()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var fresh = Path.Combine(Folder, "new.txt");
+        fileSystem.SeedExisting(fresh);
+        var tagger = TaggerWith((fresh, FixedClock.AddDays(-1)));
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), tagger);
+
+        service.PruneOldFiles();
+
+        Assert.True(fileSystem.Exists(fresh));
+        Assert.False(fileSystem.Deleted(fresh));
+    }
+
+    [Fact]
+    public void Prune_KeepsUntaggedForeignFile()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var foreign = Path.Combine(Folder, "user-keepsake.txt");
+        fileSystem.SeedExisting(foreign); // present in the folder but never tagged → not one of ours
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), new InMemoryFileTagger());
+
+        service.PruneOldFiles();
+
+        Assert.True(fileSystem.Exists(foreign));
+    }
+
+    [Fact]
+    public void Prune_BoundaryExactlyAtCutoff_Kept()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var boundary = Path.Combine(Folder, "boundary.txt");
+        fileSystem.SeedExisting(boundary);
+        var tagger = TaggerWith((boundary, FixedClock.AddDays(-7))); // == cutoff; strict < keeps it
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), tagger);
+
+        service.PruneOldFiles();
+
+        Assert.True(fileSystem.Exists(boundary));
+    }
+
+    [Fact]
+    public void Prune_EmptyOrMissingFolder_NoOp()
+    {
+        var fileSystem = new InMemoryFileSystem(); // nothing in the folder
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), new InMemoryFileTagger());
+
+        var exception = Record.Exception(() => service.PruneOldFiles());
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void Prune_DeleteFailureOnOneFile_StillPrunesOthers()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var locked = Path.Combine(Folder, "locked.txt");
+        var other = Path.Combine(Folder, "other.txt");
+        fileSystem.SeedExisting(locked);
+        fileSystem.SeedExisting(other);
+        fileSystem.FailDeleteOf(locked);
+        var tagger = TaggerWith((locked, FixedClock.AddDays(-10)), (other, FixedClock.AddDays(-10)));
+        var service = Service(new ClipboardSnapshot(null, null, null), fileSystem, new InMemoryClipboardWriter(), tagger);
+
+        var exception = Record.Exception(() => service.PruneOldFiles());
+
+        Assert.Null(exception);                    // a single delete failure never escapes
+        Assert.True(fileSystem.Exists(locked));    // its delete threw and was swallowed
+        Assert.False(fileSystem.Exists(other));    // the sweep continued past it
+    }
+
+    [Fact]
+    public void Save_TriggersPrune()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var expired = Path.Combine(Folder, "old.txt");
+        fileSystem.SeedExisting(expired);
+        var tagger = TaggerWith((expired, FixedClock.AddDays(-10)));
+        var service = Service(new ClipboardSnapshot(null, "hello", null), fileSystem, writer, tagger);
+
+        var result = service.Save();
+
+        var saved = Path.Combine(Folder, "clip-2026-06-25_13.30.45.txt");
+        Assert.Equal<SaveResult>(new SaveResult.Saved(saved), result); // the save still completes
+        Assert.Equal("@" + saved, writer.LastText);                    // and puts its @-ref back
+        Assert.False(fileSystem.Exists(expired));                      // prune ran after the save
+        Assert.True(fileSystem.Exists(saved));                         // the just-saved file survives
+    }
 }
