@@ -21,9 +21,9 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
-        var saveService = CompositionRoot.CreateSaveService();
-        AppStartup.RunLaunchTasks(saveService);
+        var (service, actions) = CompositionRoot.CreateTrayApp();
+        AppStartup.RunLaunchTasks(service);
 
-        Application.Run(new TrayApplicationContext());
+        Application.Run(new TrayApplicationContext(actions));
     }
 }
