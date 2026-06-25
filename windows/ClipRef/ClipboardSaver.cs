@@ -175,5 +175,10 @@ internal sealed class ClipboardSaver
         // freezing the menu while it copies. 100 MB (decimal, matches Finder); long because
         // file sizes can exceed Int32.
         internal const long MaxCopyableBytes = 100L * 1_000_000;
+
+        // Reverse-DNS NTFS Alternate Data Stream stamped on every file we save; its value is the
+        // save instant as epoch seconds. Prune deletes only files carrying this stream (macOS
+        // Const.ownerXattr).
+        internal const string OwnerStream = "de.manuelwelsch.ClipRef.savedAt";
     }
 }

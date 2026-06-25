@@ -3,16 +3,18 @@ namespace ClipRef;
 /// <summary>
 /// Orchestrates the save action: reads the clipboard, classifies it via
 /// <see cref="ClipboardSaver.Decide(ClipboardSnapshot)"/>, writes the payload to a uniquely-named
-/// file in the destination folder, and puts an <c>@&lt;path&gt;</c> reference back on the clipboard.
-/// Ports the write half of the macOS <c>saveClipboard</c> (the <c>write</c> helper), minus the
-/// ownership tag and prune, which are later port items. All disk and clipboard access goes through
-/// the injected seams, so the flow is unit-testable; the clock makes the timestamped name deterministic.
+/// file in the destination folder, stamps it with its NTFS-ADS ownership tag, and puts an
+/// <c>@&lt;path&gt;</c> reference back on the clipboard. Ports the write half of the macOS
+/// <c>saveClipboard</c> (the <c>write</c> helper); prune is a later port item. All disk, tag, and
+/// clipboard access goes through the injected seams, so the flow is unit-testable; the clock makes
+/// the timestamped name and the ownership tag deterministic.
 /// </summary>
 internal sealed class ClipboardSaveService
 {
     private readonly IClipboardReader _reader;
     private readonly IClipboardWriter _clipboardWriter;
     private readonly IFileSystem _fileSystem;
+    private readonly IFileTagger _fileTagger;
     private readonly Settings _settings;
     private readonly Func<DateTime> _clock;
 
@@ -20,12 +22,14 @@ internal sealed class ClipboardSaveService
         IClipboardReader reader,
         IClipboardWriter clipboardWriter,
         IFileSystem fileSystem,
+        IFileTagger fileTagger,
         Settings settings,
         Func<DateTime> clock)
     {
         _reader = reader;
         _clipboardWriter = clipboardWriter;
         _fileSystem = fileSystem;
+        _fileTagger = fileTagger;
         _settings = settings;
         _clock = clock;
     }
@@ -83,9 +87,10 @@ internal sealed class ClipboardSaveService
 
     /// <summary>
     /// The shared write path: create the destination folder, pick the unique destination via
-    /// <paramref name="destinationFor"/>, write it via <paramref name="body"/>, and swap the clipboard
-    /// for an <c>@&lt;path&gt;</c> reference. The reference is the path verbatim — no quoting or
-    /// escaping, even for paths with spaces, matching the macOS original.
+    /// <paramref name="destinationFor"/>, write it via <paramref name="body"/>, stamp it with the
+    /// ownership tag, and swap the clipboard for an <c>@&lt;path&gt;</c> reference. The reference is
+    /// the path verbatim — no quoting or escaping, even for paths with spaces, matching the macOS
+    /// original.
     /// </summary>
     private SaveResult Write(Func<string, string> destinationFor, Action<string> body)
     {
@@ -107,6 +112,17 @@ internal sealed class ClipboardSaveService
         catch (Exception exception)
         {
             return new SaveResult.Failure("Could not write file:\n" + exception.Message);
+        }
+
+        try
+        {
+            _fileTagger.TagAsSaved(destination, _clock());
+        }
+        catch (Exception)
+        {
+            // Best-effort: a failed ownership tag must not deny the user their @-reference (parity
+            // with the macOS original discarding setxattr's result). Prune simply won't recognise
+            // an untagged file as ours and will leave it alone.
         }
 
         _clipboardWriter.SetText("@" + destination);
