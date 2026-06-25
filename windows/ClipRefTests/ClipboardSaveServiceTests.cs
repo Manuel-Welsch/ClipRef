@@ -18,11 +18,13 @@ public class ClipboardSaveServiceTests
     private static ClipboardSaveService Service(
         ClipboardSnapshot snapshot,
         InMemoryFileSystem fileSystem,
-        InMemoryClipboardWriter writer)
+        InMemoryClipboardWriter writer,
+        InMemoryFileTagger? tagger = null)
     {
         var settings = new Settings(new InMemorySettingsStore(("logFolderPath", Folder)));
         return new ClipboardSaveService(
-            new InMemoryClipboardReader(snapshot), writer, fileSystem, settings, () => FixedClock);
+            new InMemoryClipboardReader(snapshot), writer, fileSystem, tagger ?? new InMemoryFileTagger(),
+            settings, () => FixedClock);
     }
 
     [Fact]
@@ -198,5 +200,111 @@ public class ClipboardSaveServiceTests
         Service(new ClipboardSnapshot(null, "x", null), fileSystem, writer).Save();
 
         Assert.Contains(Folder, fileSystem.CreatedDirectories);
+    }
+
+    [Fact]
+    public void TextSave_StampsOwnershipTagWithClockInstant()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        Service(new ClipboardSnapshot(null, "hello", null), fileSystem, writer, tagger).Save();
+
+        var expected = Path.Combine(Folder, "clip-2026-06-25_13.30.45.txt");
+        Assert.True(tagger.Tagged(expected));
+        Assert.Equal(FixedClock, tagger.TagOf(expected));
+    }
+
+    [Fact]
+    public void ImageSave_StampsOwnershipTag()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        Service(new ClipboardSnapshot(null, null, new byte[] { 1, 2, 3 }), fileSystem, writer, tagger).Save();
+
+        var expected = Path.Combine(Folder, "clip-2026-06-25_13.30.45.png");
+        Assert.True(tagger.Tagged(expected));
+        Assert.Equal(FixedClock, tagger.TagOf(expected));
+    }
+
+    [Fact]
+    public void FileCopy_StampsOwnershipTag()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        fileSystem.SetAttributes(@"C:\src\report.pdf", FileAttributes.Normal);
+        fileSystem.SetSize(@"C:\src\report.pdf", 1000);
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        Service(new ClipboardSnapshot(@"C:\src\report.pdf", null, null), fileSystem, writer, tagger).Save();
+
+        var expected = Path.Combine(Folder, "report.pdf");
+        Assert.True(tagger.Tagged(expected));
+        Assert.Equal(FixedClock, tagger.TagOf(expected));
+    }
+
+    [Fact]
+    public void GuardAbort_DoesNotStampTag()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        fileSystem.SetAttributes(@"C:\src\report.pdf", FileAttributes.Directory);
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        var result = Service(new ClipboardSnapshot(@"C:\src\report.pdf", null, null), fileSystem, writer, tagger).Save();
+
+        Assert.IsType<SaveResult.Failure>(result);
+        Assert.True(tagger.TaggedNothing);
+    }
+
+    [Fact]
+    public void TooLarge_DoesNotStampTag()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        fileSystem.SetAttributes(@"C:\src\report.pdf", FileAttributes.Normal);
+        fileSystem.SetSize(@"C:\src\report.pdf", 200_000_000);
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        var result = Service(new ClipboardSnapshot(@"C:\src\report.pdf", null, null), fileSystem, writer, tagger).Save();
+
+        Assert.IsType<SaveResult.Failure>(result);
+        Assert.True(tagger.TaggedNothing);
+    }
+
+    [Fact]
+    public void NothingToSave_DoesNotStampTag()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        var result = Service(new ClipboardSnapshot(null, null, null), fileSystem, writer, tagger).Save();
+
+        Assert.Equal<SaveResult>(new SaveResult.NothingToSave(), result);
+        Assert.True(tagger.TaggedNothing);
+    }
+
+    [Fact]
+    public void WriteFailure_DoesNotStampTag()
+    {
+        var fileSystem = new InMemoryFileSystem { ThrowOnWrite = true };
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        var result = Service(new ClipboardSnapshot(null, "x", null), fileSystem, writer, tagger).Save();
+
+        var failure = Assert.IsType<SaveResult.Failure>(result);
+        Assert.StartsWith("Could not write file", failure.Message);
+        Assert.True(tagger.TaggedNothing);
+    }
+
+    [Fact]
+    public void TagFailureStillSucceeds_BestEffort()
+    {
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger { ThrowOnTag = true };
+        var result = Service(new ClipboardSnapshot(null, "hello", null), fileSystem, writer, tagger).Save();
+
+        var expected = Path.Combine(Folder, "clip-2026-06-25_13.30.45.txt");
+        Assert.Equal<SaveResult>(new SaveResult.Saved(expected), result);
+        Assert.Equal("@" + expected, writer.LastText);
     }
 }
