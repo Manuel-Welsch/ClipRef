@@ -4,8 +4,9 @@ namespace ClipRef;
 /// The one place the production seams are wired into a live <see cref="ClipboardSaveService"/> (and,
 /// for the tray, a <see cref="TrayActions"/> over the same shared <see cref="Settings"/>). Touches the
 /// real OS (clipboard, disk, NTFS, settings file), so — like the adapters it composes — it is
-/// integration-only, not unit-tested. <see cref="CreateTrayApp"/> serves the tray host (this item);
-/// <see cref="CreateSaveService"/> serves the <c>--save-once</c> headless mode (a later item). See ADR-0008/0009.
+/// integration-only, not unit-tested. <see cref="CreateTrayApp"/> serves the tray host;
+/// <see cref="CreateSaveService"/> backs the <c>--save-once</c> headless mode (<see cref="SaveOnceMode.Run"/>).
+/// See ADR-0008/0009.
 /// </summary>
 internal static class CompositionRoot
 {
@@ -25,7 +26,7 @@ internal static class CompositionRoot
         return (service, actions, feedback);
     }
 
-    /// <summary>A standalone save service for the headless <c>--save-once</c> mode (a later item).</summary>
+    /// <summary>A standalone save service for the headless <c>--save-once</c> mode (<see cref="SaveOnceMode.Run"/>).</summary>
     internal static ClipboardSaveService CreateSaveService() =>
         BuildService(new Settings(new JsonSettingsStore(JsonSettingsStore.DefaultFilePath)), new FileSystem());
 
