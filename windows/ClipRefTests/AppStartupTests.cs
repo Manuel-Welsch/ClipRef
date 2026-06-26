@@ -41,6 +41,11 @@ public class AppStartupTests
         return tagger;
     }
 
+    // An already-configured login item: EnableOnFirstRun is a guaranteed no-op, so the prune-focused
+    // tests below are not perturbed by the launch sequence's first-run opt-in.
+    private static LoginItem NoOpLoginItem() =>
+        new(new FakeAutoStart(enabled: true), new Settings(new InMemorySettingsStore(("didConfigureLoginItem", "true"))));
+
     [Fact]
     public void RunLaunchTasks_DeletesExpiredTaggedFile()
     {
@@ -49,7 +54,7 @@ public class AppStartupTests
         fileSystem.SeedExisting(expired);
         var service = Service(fileSystem, TaggerWith((expired, FixedClock.AddDays(-10))));
 
-        AppStartup.RunLaunchTasks(service);
+        AppStartup.RunLaunchTasks(service, NoOpLoginItem());
 
         Assert.False(fileSystem.Exists(expired)); // launch-time prune fired
         Assert.True(fileSystem.Deleted(expired));
@@ -65,7 +70,7 @@ public class AppStartupTests
         fileSystem.SeedExisting(foreign); // present but never tagged → not one of ours
         var service = Service(fileSystem, TaggerWith((recent, FixedClock.AddDays(-1))));
 
-        AppStartup.RunLaunchTasks(service);
+        AppStartup.RunLaunchTasks(service, NoOpLoginItem());
 
         Assert.True(fileSystem.Exists(recent));  // within retention → kept
         Assert.True(fileSystem.Exists(foreign)); // untagged → never touched (not a blanket wipe)
@@ -77,8 +82,23 @@ public class AppStartupTests
         var fileSystem = new InMemoryFileSystem(); // nothing in the folder
         var service = Service(fileSystem, new InMemoryFileTagger());
 
-        var exception = Record.Exception(() => AppStartup.RunLaunchTasks(service));
+        var exception = Record.Exception(() => AppStartup.RunLaunchTasks(service, NoOpLoginItem()));
 
         Assert.Null(exception); // launch never throws on an empty/missing folder
+    }
+
+    [Fact]
+    public void RunLaunchTasks_OnFirstRun_EnablesLoginItemAndSetsFlag()
+    {
+        var fileSystem = new InMemoryFileSystem(); // empty folder → prune no-ops
+        var service = Service(fileSystem, new InMemoryFileTagger());
+        var autoStart = new FakeAutoStart(enabled: false);
+        var settings = new Settings(new InMemorySettingsStore()); // didConfigureLoginItem unset
+        var loginItem = new LoginItem(autoStart, settings);
+
+        AppStartup.RunLaunchTasks(service, loginItem);
+
+        Assert.True(autoStart.IsEnabled);            // launch wired the first-run opt-in
+        Assert.True(settings.DidConfigureLoginItem); // and recorded that it configured the item
     }
 }

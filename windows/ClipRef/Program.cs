@@ -31,10 +31,10 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
-        var (service, actions, feedback) = CompositionRoot.CreateTrayApp();
-        AppStartup.RunLaunchTasks(service);
+        var (service, actions, feedback, loginItem) = CompositionRoot.CreateTrayApp();
+        AppStartup.RunLaunchTasks(service, loginItem);
 
-        Application.Run(new TrayApplicationContext(actions, feedback));
+        Application.Run(new TrayApplicationContext(actions, feedback, loginItem));
         return 0;
     }
 }

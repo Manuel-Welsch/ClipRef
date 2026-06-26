@@ -7,23 +7,27 @@ namespace ClipRef;
 ///
 /// A single left-click saves the clipboard; a right-click opens the context menu (Save Clipboard Now,
 /// Open Folder, Change Folder…, Launch at Login, Quit). All behavior is delegated to the WinForms-free
-/// <see cref="TrayActions"/>, so this host stays thin integration glue (ADR-0009). A save flashes the
-/// tray icon, plays a sound, and shows an error dialog on failure via the injected
-/// <see cref="WinFormsSaveFeedback"/> adapter (bound to this icon through <see cref="WinFormsSaveFeedback.Attach"/>).
-/// The live launch-at-login registry wiring is a later item — that menu entry is a disabled placeholder for now.
+/// <see cref="TrayActions"/> and <see cref="LoginItem"/>, so this host stays thin integration glue
+/// (ADR-0009/0011). A save flashes the tray icon, plays a sound, and shows an error dialog on failure via
+/// the injected <see cref="WinFormsSaveFeedback"/> adapter (bound to this icon through
+/// <see cref="WinFormsSaveFeedback.Attach"/>). Launch at Login is a live, checkable toggle whose check
+/// reflects the registry state and whose failures surface in a dialog.
 /// </summary>
 internal sealed class TrayApplicationContext : ApplicationContext
 {
     private readonly TrayActions _actions;
     private readonly WinFormsSaveFeedback _feedback;
+    private readonly LoginItem _loginItem;
     private readonly Icon _icon;
     private readonly NotifyIcon _trayIcon;
     private ToolStripMenuItem _folderHeader = null!;
+    private ToolStripMenuItem _launchAtLoginItem = null!;
 
-    public TrayApplicationContext(TrayActions actions, WinFormsSaveFeedback feedback)
+    public TrayApplicationContext(TrayActions actions, WinFormsSaveFeedback feedback, LoginItem loginItem)
     {
         _actions = actions;
         _feedback = feedback;
+        _loginItem = loginItem;
         _icon = LoadTrayIcon();
         _trayIcon = new NotifyIcon
         {
@@ -61,15 +65,38 @@ internal sealed class TrayApplicationContext : ApplicationContext
         menu.Items.Add("Change Folder…", null, (_, _) => _actions.ChangeFolder());
         menu.Items.Add(new ToolStripSeparator());
 
-        // Disabled placeholder: the live launch-at-login (HKCU\…\Run) wiring is a later item.
-        menu.Items.Add(new ToolStripMenuItem("Launch at Login") { Enabled = false, Checked = false });
+        _launchAtLoginItem = new ToolStripMenuItem("Launch at Login", null, (_, _) => ToggleLaunchAtLogin());
+        menu.Items.Add(_launchAtLoginItem);
         menu.Items.Add(new ToolStripSeparator());
 
         menu.Items.Add("Quit", null, (_, _) => Quit());
 
-        // Refresh the folder header each time the menu opens, so it tracks a Change Folder… edit.
-        menu.Opening += (_, _) => _folderHeader.Text = $"Saves → {_actions.CurrentFolder}";
+        // Refresh the folder header and the Launch at Login checkmark each time the menu opens, so they
+        // track a Change Folder… edit and the live registry state (e.g. a toggle made elsewhere).
+        menu.Opening += (_, _) =>
+        {
+            _folderHeader.Text = $"Saves → {_actions.CurrentFolder}";
+            _launchAtLoginItem.Checked = _loginItem.IsEnabled;
+        };
         return menu;
+    }
+
+    private void ToggleLaunchAtLogin()
+    {
+        try
+        {
+            _loginItem.Toggle();
+            _launchAtLoginItem.Checked = _loginItem.IsEnabled;
+        }
+        catch (Exception exception)
+        {
+            // Parity with the macOS toggleLaunchAtLogin presenting an error on a failed register/unregister.
+            MessageBox.Show(
+                $"Could not change the launch-at-login setting:\n{exception.Message}",
+                "ClipRef",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     private void Quit()
