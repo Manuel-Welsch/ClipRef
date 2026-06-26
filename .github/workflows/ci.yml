@@ -43,3 +43,23 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             ASSETCATALOG_COMPILER_APPICON_NAME=
+
+  windows-test:
+    name: Windows unit tests
+    # GitHub-hosted, ephemeral Windows runner for the .NET port under windows/.
+    # windows-latest is NTFS, so the [Trait("Category","Integration")] tests
+    # (real Alternate Data Stream tagging + on-disk prune) run for real here.
+    # No actions/setup-dotnet: the runner ships the .NET 8 SDK plus the Windows
+    # Desktop pack that net8.0-windows + WindowsForms needs, mirroring how the
+    # macOS job above uses the runner's preinstalled Xcode.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build (warnings as errors)
+        run: dotnet build windows/ClipRef.sln -warnaserror
+
+      - name: Run tests
+        # --no-build reuses the warnings-as-errors build above; one run covers
+        # the whole suite (unit + integration), like the macOS scheme run.
+        run: dotnet test windows/ClipRef.sln --no-build
