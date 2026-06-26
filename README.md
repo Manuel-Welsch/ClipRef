@@ -17,6 +17,8 @@ until they matter.
 
 ## Install
 
+> **On Windows?** This is the macOS app — for the Windows port see [`windows/README.md`](windows/README.md).
+
 Requires macOS 14 (Sonoma) or later. Install with [Homebrew](https://brew.sh):
 
 ```sh
