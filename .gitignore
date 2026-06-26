@@ -13,13 +13,6 @@ xcuserdata/
 # macOS
 .DS_Store
 
-# Claude Code workflow artifacts
-.claude/
-CLAUDE.md
-
-# Per-project PowerShell background color (personal terminal tint)
-.pscolor
-
 # .NET build output (Windows port under windows/)
 bin/
 obj/
