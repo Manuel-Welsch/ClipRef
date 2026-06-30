@@ -8,10 +8,12 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ClipRef</RootNamespace>
     <AssemblyName>ClipRef</AssemblyName>
-    <ApplicationIcon>Assets\ClipRef.ico</ApplicationIcon>
+    <!-- Executable icon (Explorer, Properties): the full-colour ClipRef app icon. -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Tray icon: monochrome clipboard glyph, mirroring the macOS menu-bar item. -->
     <EmbeddedResource Include="Assets\ClipRef.ico">
       <LogicalName>ClipRef.ico</LogicalName>
     </EmbeddedResource>
