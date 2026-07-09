@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>ClipRef</RootNamespace>
+    <AssemblyName>ClipRef</AssemblyName>
+    <!-- Executable icon (Explorer, Properties): the full-colour ClipRef app icon. -->
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Tray icon: monochrome clipboard glyph, mirroring the macOS menu-bar item. -->
+    <EmbeddedResource Include="Assets\ClipRef.ico">
+      <LogicalName>ClipRef.ico</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\success.ico">
+      <LogicalName>ClipRef.success.ico</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\warning.ico">
+      <LogicalName>ClipRef.warning.ico</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Assets\failure.ico">
+      <LogicalName>ClipRef.failure.ico</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+</Project>

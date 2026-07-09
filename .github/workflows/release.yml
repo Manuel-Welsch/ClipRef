@@ -75,3 +75,26 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -aqm "clipref ${VERSION}"
           git push
+
+  windows-release:
+    name: Package & attach the Windows build
+    # Runs after the macOS job has created the Release, then attaches the Windows
+    # zip to it. needs: release keeps the upload race-free (the Release exists) and
+    # leaves the macOS job's steps untouched. windows-latest ships the .NET 8 SDK +
+    # Windows Desktop pack, so no actions/setup-dotnet — same as the CI test job.
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build the release zip
+        shell: pwsh
+        run: ./scripts/release-win.ps1 -Version ($env:GITHUB_REF_NAME -replace '^v','')
+
+      - name: Attach to the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v',''
+          gh release upload $env:GITHUB_REF_NAME "build/release/ClipRef-$version-win-x64.zip" --clobber
