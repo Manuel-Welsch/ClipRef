@@ -24,7 +24,9 @@ public class ClipboardSaveServiceTests
         var settings = new Settings(new InMemorySettingsStore(("logFolderPath", Folder)));
         return new ClipboardSaveService(
             new InMemoryClipboardReader(snapshot), writer, fileSystem, tagger ?? new InMemoryFileTagger(),
-            settings, () => FixedClock);
+            // UTC display zone keeps the exact clip-<timestamp> filenames deterministic regardless of
+            // the test runner's local timezone; the local-zone rendering is pinned by its own test.
+            settings, () => FixedClock, TimeZoneInfo.Utc);
     }
 
     [Fact]
@@ -213,6 +215,34 @@ public class ClipboardSaveServiceTests
         var expected = Path.Combine(Folder, "clip-2026-06-25_13.30.45.txt");
         Assert.True(tagger.Tagged(expected));
         Assert.Equal(FixedClock, tagger.TagOf(expected));
+    }
+
+    [Fact]
+    public void TextSave_FilenameUsesLocalDisplayTime_WhileTagStaysUtc()
+    {
+        // Regression (timestamp-utc-offset): the filename timestamp must render in the machine's
+        // *local* wall-clock — macOS DateFormatter parity — while the ownership tag stays on the
+        // absolute UTC instant. The bug fed one UTC clock into both, so the name ran 2 h behind
+        // local in CEST. A fixed UTC clock plus a custom UTC+2 display zone pins both halves.
+        var utcInstant = new DateTime(2026, 6, 25, 13, 30, 45, DateTimeKind.Utc);
+        var plusTwo = TimeZoneInfo.CreateCustomTimeZone(
+            "UTC+2 (test)", TimeSpan.FromHours(2), "UTC+2 (test)", "UTC+2 (test)");
+        var fileSystem = new InMemoryFileSystem();
+        var writer = new InMemoryClipboardWriter();
+        var tagger = new InMemoryFileTagger();
+        var settings = new Settings(new InMemorySettingsStore(("logFolderPath", Folder)));
+        var service = new ClipboardSaveService(
+            new InMemoryClipboardReader(new ClipboardSnapshot(null, "hello", null)),
+            writer, fileSystem, tagger, settings, () => utcInstant, plusTwo);
+
+        var result = service.Save();
+
+        // 13:30:45 UTC + 2 h → the name (and the @-reference) show 15:30:45 local wall-clock…
+        var expected = Path.Combine(Folder, "clip-2026-06-25_15.30.45.txt");
+        Assert.Equal<SaveResult>(new SaveResult.Saved(expected), result);
+        Assert.Equal("@" + expected, writer.LastText);
+        // …while the ownership tag keeps the raw, unshifted UTC instant so prune stays correct.
+        Assert.Equal(utcInstant, tagger.TagOf(expected));
     }
 
     [Fact]

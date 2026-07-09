@@ -46,7 +46,9 @@ public class TrayActionsTests
         var writer = new InMemoryClipboardWriter();
         var service = new ClipboardSaveService(
             new InMemoryClipboardReader(clipboard ?? new ClipboardSnapshot(null, null, null)),
-            writer, fileSystem, new InMemoryFileTagger(), settings, () => FixedClock);
+            // UTC display zone keeps the exact clip-<timestamp> filenames deterministic regardless of
+            // the test runner's local timezone (see ClipboardSaveServiceTests).
+            writer, fileSystem, new InMemoryFileTagger(), settings, () => FixedClock, TimeZoneInfo.Utc);
         var actions = new TrayActions(service, settings, fileSystem, launcher, picker, feedback);
         return new Harness(actions, service, fileSystem, writer, settings, launcher, picker, feedback);
     }

@@ -7,8 +7,8 @@ namespace ClipRef;
 /// <c>@&lt;path&gt;</c> reference back on the clipboard, then prunes expired tagged files. Ports the
 /// write half of the macOS <c>saveClipboard</c> (the <c>write</c> helper) plus its trailing
 /// <c>pruneOldFiles</c>. All disk, tag, and clipboard access goes through the injected seams, so the
-/// flow is unit-testable; the clock makes the timestamped name, the ownership tag, and the prune
-/// cutoff deterministic.
+/// flow is unit-testable; the UTC clock makes the ownership tag and the prune cutoff deterministic,
+/// and together with the display timezone the timestamped filename too.
 /// </summary>
 internal sealed class ClipboardSaveService
 {
@@ -17,7 +17,16 @@ internal sealed class ClipboardSaveService
     private readonly IFileSystem _fileSystem;
     private readonly IFileTagger _fileTagger;
     private readonly Settings _settings;
+
+    // The absolute save instant, and it MUST be UTC: NtfsFileTagger stores the ownership tag as epoch
+    // seconds and prune compares the tag against now − RetentionDays, so both stay on this one basis.
     private readonly Func<DateTime> _clock;
+
+    // The timezone the human-readable clip-<timestamp> filename is rendered in — the machine's local
+    // zone in production. Only the cosmetic name uses it; the tag and prune keep the raw UTC _clock
+    // instant. Mirrors the macOS original, which formats the filename in the local zone while storing
+    // the tag as an absolute epoch (ClipboardSaver.swift timestampFormatter vs tagAsSaved).
+    private readonly TimeZoneInfo _displayTimeZone;
 
     internal ClipboardSaveService(
         IClipboardReader reader,
@@ -25,7 +34,8 @@ internal sealed class ClipboardSaveService
         IFileSystem fileSystem,
         IFileTagger fileTagger,
         Settings settings,
-        Func<DateTime> clock)
+        Func<DateTime> clock,
+        TimeZoneInfo? displayTimeZone = null)
     {
         _reader = reader;
         _clipboardWriter = clipboardWriter;
@@ -33,7 +43,17 @@ internal sealed class ClipboardSaveService
         _fileTagger = fileTagger;
         _settings = settings;
         _clock = clock;
+        _displayTimeZone = displayTimeZone ?? TimeZoneInfo.Local;
     }
+
+    /// <summary>
+    /// The current save instant expressed in <see cref="_displayTimeZone"/>, used only to render the
+    /// human-readable <c>clip-&lt;timestamp&gt;</c> filename. The ownership tag and prune keep the raw
+    /// UTC <see cref="_clock"/> instant, so localizing the name never shifts the absolute basis they
+    /// compare on. Requires the clock to be UTC- or unspecified-kind (the documented contract), which
+    /// <see cref="TimeZoneInfo.ConvertTimeFromUtc(DateTime, TimeZoneInfo)"/> also enforces.
+    /// </summary>
+    private DateTime NowInDisplayZone() => TimeZoneInfo.ConvertTimeFromUtc(_clock(), _displayTimeZone);
 
     /// <summary>
     /// Reads the clipboard once, decides what to save, writes it, and replaces the clipboard with an
@@ -47,7 +67,7 @@ internal sealed class ClipboardSaveService
         {
             SaveDecision.CopyFile copyFile => CopyFile(copyFile.Path),
             SaveDecision.SaveText saveText => Write(
-                folder => ClipboardSaver.UniqueGeneratedPath(folder, ClipboardSaver.Const.TextExtension, _clock(), _fileSystem.Exists),
+                folder => ClipboardSaver.UniqueGeneratedPath(folder, ClipboardSaver.Const.TextExtension, NowInDisplayZone(), _fileSystem.Exists),
                 destination => _fileSystem.WriteAllText(destination, saveText.Text)),
             SaveDecision.SaveImage => SaveImage(snapshot),
             _ => new SaveResult.NothingToSave(),
@@ -82,7 +102,7 @@ internal sealed class ClipboardSaveService
 
         var imagePng = snapshot.ImagePng;
         return Write(
-            folder => ClipboardSaver.UniqueGeneratedPath(folder, ClipboardSaver.Const.ImageExtension, _clock(), _fileSystem.Exists),
+            folder => ClipboardSaver.UniqueGeneratedPath(folder, ClipboardSaver.Const.ImageExtension, NowInDisplayZone(), _fileSystem.Exists),
             destination => _fileSystem.WriteAllBytes(destination, imagePng));
     }
 

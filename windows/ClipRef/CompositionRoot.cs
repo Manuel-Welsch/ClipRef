@@ -37,7 +37,9 @@ internal static class CompositionRoot
     private static ClipboardSaveService BuildService(Settings settings, IFileSystem fileSystem) =>
         // The clock MUST be UTC: NtfsFileTagger stores the ownership tag as UTC, and prune compares
         // the tag against now − RetentionDays, so the two must share a basis (the Phase-3 contract
-        // flagged at ClipboardSaveService.PruneOldFiles).
+        // flagged at ClipboardSaveService.PruneOldFiles). The clip-<timestamp> filename is rendered in
+        // the machine's local zone instead — the default TimeZoneInfo.Local display zone — so the name
+        // reads as local wall-clock (macOS parity) while the tag and prune stay on UTC.
         new ClipboardSaveService(
             new WinFormsClipboardReader(),
             new WinFormsClipboardWriter(),
